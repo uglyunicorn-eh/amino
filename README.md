@@ -181,11 +181,16 @@ This enables seamless integration with any framework or custom return type requi
 ### Operation
 
 - `operation<C, V>(context?: C, value?: V)` - Create operation pipeline
-- `makeOperation<C, E, R>(handler)` - Create operation factory with custom completion
 - `.step<NV>(fn: (value: V, context: C) => Result<NV>)` - Add processing step
 - `.context<NC>(fn: (context: C, value: V) => NC)` - Transform context
 - `.failsWith<E>(ErrorClass, message)` - Set custom error type
 - `.complete()` - Execute pipeline and return Result (or custom type)
+
+### makeOperation Factory
+
+- `makeOperation<C, E, R>(handler)` - Create operation factory with custom completion
+- Returns factory function: `(context?: C, value?: V) => Operation<V, C, E, Promise<R>>`
+- `handler`: `(result: Result<V, E>, context: C) => R` - Custom completion handler
 
 ## License
 
