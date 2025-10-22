@@ -38,10 +38,10 @@ export interface Operation<V, C, E = Error> {
 
   /**
    * Add a context transformation step to the pipeline
-   * @param fn - Context function that transforms the context
+   * @param fn - Context function that transforms the context (returns new context directly)
    * @returns New operation with updated context type
    */
-  context<NC>(fn: (context: C, value: V) => Result<NC> | AsyncResult<NC>): Operation<V, NC, E>;
+  context<NC>(fn: (context: C, value: V) => NC): Operation<V, NC, E>;
 
   /**
    * Set error transformation for the operation
@@ -93,14 +93,11 @@ class OperationImpl<V, C, E = Error> implements Operation<V, C, E> {
     });
   }
 
-  context<NC>(fn: (context: C, value: V) => Result<NC> | AsyncResult<NC>): Operation<V, NC, E> {
-    // Convert context function to unified pipeline function
+  context<NC>(fn: (context: C, value: V) => NC): Operation<V, NC, E> {
+    // Convert plain context function to unified pipeline function
     const pipelineFn: PipelineFunction<V, V, C, NC> = async (context: C, value: V) => {
-      const result = await fn(context, value);
-      if (result.err !== undefined) {
-        return err(result.err);
-      }
-      return ok({ context: result.res, value });
+      const newContext = fn(context, value);
+      return ok({ context: newContext, value });
     };
 
     const newSteps = [...this.state.steps, { fn: pipelineFn }];
