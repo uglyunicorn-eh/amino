@@ -56,7 +56,7 @@ Chain operations with fail-fast error handling and context management.
 ```typescript
 import { operation, ok, err } from '@uglyunicorn/amino';
 
-const result = await operation('context', 10)
+const result = await operation({ userId: 'user123', requestId: 'req456' }, 10)
   .step((value: number) => ok(value * 2))
   .step((value: number) => ok(value + 1))
   .complete();
@@ -71,7 +71,7 @@ if (result.err === undefined) {
 #### 1. Fail-Fast Error Handling
 
 ```typescript
-const result = await operation()
+const result = await operation({ operationId: 'op123' })
   .step((value: number) => ok(value * 2))
   .step((value: number) => err('Failed!'))
   .step((value: number) => ok(value + 1)) // Skipped
@@ -83,9 +83,9 @@ const result = await operation()
 #### 2. Context Management
 
 ```typescript
-const result = await operation('initial', 5)
+const result = await operation({ userId: 'user123' }, 5)
   .step((value: number) => ok(value * 2))
-  .context((ctx: string, value: number) => `${ctx}-processed`)
+  .context((ctx: { userId: string }, value: number) => ({ ...ctx, processed: true }))
   .step((value: number) => ok(value + 1))
   .complete();
 ```
@@ -99,7 +99,7 @@ class ValidationError extends Error {
   }
 }
 
-const result = await operation()
+const result = await operation({ requestId: 'req123' })
   .failsWith(ValidationError, 'Validation failed')
   .step((value: number) => err('Invalid input'))
   .complete();
@@ -110,7 +110,7 @@ const result = await operation()
 #### 4. Async Operations
 
 ```typescript
-const result = await operation()
+const result = await operation({ sessionId: 'sess456' })
   .step((value: number) => ok(value * 2))        // sync
   .step(async (value: number) => ok(value + 1))  // async
   .step((value: number) => ok(value * 2))        // sync
@@ -122,7 +122,7 @@ const result = await operation()
 TypeScript infers types throughout the chain:
 
 ```typescript
-const result = await operation()
+const result = await operation({ traceId: 'trace789' })
   .step((value: number) => ok(value.toString()))  // number -> string
   .step((value: string) => ok(value.length))      // string -> number
   .step((value: number) => ok(value > 0))         // number -> boolean
