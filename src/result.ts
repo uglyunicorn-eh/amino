@@ -42,8 +42,16 @@ export function ok<T>(value: T): Success<T> {
  * @returns A Fail result
  */
 export function err<E = Error>(error: E | string): Fail<E> {
+  if (error instanceof Error) {
+    return {
+      res: undefined,
+      err: error as E,
+    };
+  }
+  
+  // At this point, error must be a string
   return {
     res: undefined,
-    err: error instanceof Error ? error : new Error(error) as E,
+    err: new Error(error as string) as E,
   };
 }
