@@ -9,20 +9,20 @@ export type Success<T> = {
 /**
  * Fail result containing an error
  */
-export type Fail = {
+export type Fail<E = Error> = {
   res: undefined;
-  err: Error;
+  err: E;
 };
 
 /**
  * Result type - discriminated union of Success or Fail
  */
-export type Result<T> = Success<T> | Fail;
+export type Result<T, E = Error> = Success<T> | Fail<E>;
 
 /**
  * Async result type - Promise that resolves to a Result
  */
-export type AsyncResult<T> = Promise<Result<T>>;
+export type AsyncResult<T, E = Error> = Promise<Result<T, E>>;
 
 /**
  * Creates a successful result
@@ -37,13 +37,35 @@ export function ok<T>(value: T): Success<T> {
 }
 
 /**
+ * Creates a failed result with a custom error type
+ * @param error - The error instance
+ * @returns A Fail result with the custom error type
+ */
+export function err<E extends Error>(error: E): Fail<E>;
+
+/**
+ * Creates a failed result with a string message (becomes Error)
+ * @param message - The error message string
+ * @returns A Fail result with Error type
+ */
+export function err(message: string): Fail<Error>;
+
+/**
  * Creates a failed result
  * @param error - The error (Error instance or string)
  * @returns A Fail result
  */
-export function err(error: Error | string): Fail {
+export function err<E extends Error>(error: E | string): Fail<E> | Fail<Error> {
+  if (error instanceof Error) {
+    return {
+      res: undefined,
+      err: error,
+    };
+  }
+  
+  // At this point, error must be a string
   return {
     res: undefined,
-    err: error instanceof Error ? error : new Error(error),
+    err: new Error(error),
   };
 }

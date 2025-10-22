@@ -27,7 +27,7 @@ export function trycatch<T>(fn: () => T): Result<T> | AsyncResult<any> {
           if (error instanceof Error) {
             return err(error);
           }
-          return err(String(error));
+          return err(new Error(String(error)));
         }) as AsyncResult<T>;
     }
     
@@ -36,6 +36,6 @@ export function trycatch<T>(fn: () => T): Result<T> | AsyncResult<any> {
     if (error instanceof Error) {
       return err(error);
     }
-    return err(String(error));
+    return err(new Error(String(error)));
   }
 }
