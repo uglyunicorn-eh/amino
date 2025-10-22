@@ -81,10 +81,10 @@ if (result.err === undefined) {
 #### Context Management
 
 ```typescript
-// Context updates while preserving value
+// Context updates while preserving value - clean and simple!
 const result = await operation(5, 'initial')
   .step((value: number) => ok(value * 2))
-  .context((ctx: string, value: number) => ok(`${ctx}-processed`))
+  .context((ctx: string, value: number) => `${ctx}-processed`)
   .step((value: number) => ok(value + 1))
   .complete();
 
@@ -166,7 +166,7 @@ const result = await operation('john@example.com', { apiUrl: 'https://api.exampl
     return ok(user);
   })
   .context((ctx: { apiUrl: string }, user: User) => {
-    return ok({ ...ctx, userId: user.id });
+    return { ...ctx, userId: user.id };
   })
   .step((user: User) => {
     const profile: UserProfile = {
