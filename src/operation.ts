@@ -2,11 +2,12 @@ import { type Result, type AsyncResult, ok, err } from './result.ts';
 
 /**
  * Unified pipeline function signature - transforms both context and value
+ * Context transformations always succeed, value transformations return Result
  * @param context - Current context
  * @param value - Current value
- * @returns Result or AsyncResult with new context and new value
+ * @returns Tuple of [new context, Result of new value]
  */
-export type PipelineFunction<V, NV, C, NC> = (context: C, value: V) => Result<{ context: NC; value: NV }> | AsyncResult<{ context: NC; value: NV }>;
+export type PipelineFunction<V, NV, C, NC> = (context: C, value: V) => [NC, Result<NV>] | Promise<[NC, Result<NV>]>;
 
 /**
  * Error transformer signature - transforms errors
@@ -90,8 +91,7 @@ class OperationImpl<V, C, E extends Error = Error> implements Operation<V, C, E>
       const awaited = (result && typeof (result as any).then === 'function') 
         ? await result 
         : result as Result<NV>;
-      const { err: error, res } = awaited;
-      return error !== undefined ? err(error) : ok({ context, value: res });
+      return [context, awaited]; // Context unchanged, result forwarded
     };
 
     const newSteps = [...steps, { fn: pipelineFn }];
@@ -108,7 +108,7 @@ class OperationImpl<V, C, E extends Error = Error> implements Operation<V, C, E>
     
     // Convert plain context function to unified pipeline function
     const pipelineFn: PipelineFunction<V, V, C, NC> = async (context: C, value: V) => 
-      ok({ context: fn(context, value), value });
+      [fn(context, value), ok(value)]; // New context, value unchanged
 
     const newSteps = [...steps, { fn: pipelineFn }];
     return new OperationImpl<V, NC, E>({
@@ -160,24 +160,24 @@ class OperationImpl<V, C, E extends Error = Error> implements Operation<V, C, E>
 
       // Execute each step in sequence, checking for errors at each step.
       for (const { fn } of steps) {
-        const { err: error, res } = await fn(currentContext, currentValue);
+        const [newContext, result] = await fn(currentContext, currentValue);
+        const { err: error, res } = result;
         
         if (error !== undefined) {
           // Step failed - apply error transformation if configured
           return err(errorTransformer ? errorTransformer(error) : error) as Result<V, E>;
         }
         
-        // Update both context and value from unified result
-        const { context, value } = res;
-        currentContext = context;
-        currentValue = value;
+        // Update both context and value from tuple
+        currentContext = newContext;
+        currentValue = res;
       }
 
       // All steps completed successfully
       return ok(currentValue);
     } catch (error) {
       // Unexpected error during execution
-      const transformedError = errorTransformer
+      const transformedError = errorTransformer 
         ? errorTransformer(error instanceof Error ? error : new Error(String(error)))
         : (error instanceof Error ? error : new Error(String(error)));
       return err(transformedError) as Result<V, E>;
