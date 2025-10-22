@@ -210,11 +210,11 @@ class OperationImpl<V, C, E extends Error = Error, R = AsyncResult<V, E>> implem
 
 /**
  * Creates a new operation pipeline
- * @param initialValue - Optional initial value to start the pipeline with
  * @param initialContext - Optional initial context for the pipeline
+ * @param initialValue - Optional initial value to start the pipeline with
  * @returns A new operation instance
  */
-export function operation<V = unknown, C = unknown>(initialValue?: V, initialContext?: C): Operation<V, C, Error> {
+export function operation<C = unknown, V = unknown>(initialContext?: C, initialValue?: V): Operation<V, C, Error> {
   return new OperationImpl<V, C, Error>({
     steps: [],
     initialValue,
@@ -229,8 +229,8 @@ export function operation<V = unknown, C = unknown>(initialValue?: V, initialCon
  */
 export function makeOperation<C = unknown, E extends Error = Error, R = any>(
   completeHandler: (result: Result<any, E>, context: C) => R
-): <V = unknown>(initialValue?: V, initialContext?: C) => Operation<V, C, E, Promise<R>> {
-  return <V = unknown>(initialValue?: V, initialContext?: C) => {
+): <V = unknown>(initialContext?: C, initialValue?: V) => Operation<V, C, E, Promise<R>> {
+  return <V = unknown>(initialContext?: C, initialValue?: V) => {
     return new OperationImpl<V, C, E, Promise<R>>({
       steps: [],
       initialValue,

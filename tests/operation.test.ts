@@ -4,7 +4,7 @@ import { ok, err, type Result } from '../src/result.ts';
 
 describe('Operation Pipeline', () => {
   test('creates operation instance', () => {
-    const op = operation(42, 'initial-context');
+    const op = operation('initial-context', 42);
     expect(op).toBeDefined();
     expect(typeof op.step).toBe('function');
     expect(typeof op.context).toBe('function');
@@ -15,7 +15,7 @@ describe('Operation Pipeline', () => {
   test('creates operation instance with optional arguments', () => {
     const op1 = operation();
     const op2 = operation(42);
-    const op3 = operation(undefined, 'context');
+    const op3 = operation('context', undefined);
     
     expect(op1).toBeDefined();
     expect(op2).toBeDefined();
@@ -23,7 +23,7 @@ describe('Operation Pipeline', () => {
   });
 
   test('can chain step methods', () => {
-    const op = operation(10, 'test-context')
+    const op = operation('test-context', 10)
       .step((value: number) => ok(value * 2))
       .step((value: number) => ok(value + 1));
     
@@ -35,7 +35,7 @@ describe('Operation Pipeline', () => {
   });
 
   test('can chain context methods', () => {
-    const op = operation(42, 'initial')
+    const op = operation('initial', 42)
       .context((ctx: string, value: number) => `${ctx}-${value}`)
       .context((ctx: string, value: number) => `${ctx}-processed`);
     
@@ -53,7 +53,7 @@ describe('Operation Pipeline', () => {
       }
     }
 
-    const op = operation(42, 'test')
+    const op = operation('test', 42)
       .failsWith(CustomError, 'Operation failed')
       .failsWith('Generic error');
     
@@ -71,7 +71,7 @@ describe('Operation Pipeline', () => {
       }
     }
 
-    const op = operation(10, 'initial')
+    const op = operation('initial', 10)
       .step((value: number) => ok(value * 2))
       .context((ctx: string, value: number) => `${ctx}-${value}`)
       .failsWith(CustomError, 'Step failed')
@@ -86,7 +86,7 @@ describe('Operation Pipeline', () => {
   });
 
   test('complete method executes pipeline successfully', async () => {
-    const op = operation(10, 'test')
+    const op = operation('test', 10)
       .step((value: number) => ok(value * 2))
       .step((value: number) => ok(value + 1));
     
@@ -97,7 +97,7 @@ describe('Operation Pipeline', () => {
   });
 
   test('pipeline execution with context updates', async () => {
-    const op = operation(5, 'initial')
+    const op = operation('initial', 5)
       .step((value: number) => ok(value * 2))
       .context((ctx: string, value: number) => `${ctx}-${value}`)
       .step((value: number) => ok(value + 1));
@@ -109,7 +109,7 @@ describe('Operation Pipeline', () => {
   });
 
   test('pipeline execution with async steps', async () => {
-    const op = operation(3, 'test')
+    const op = operation('test', 3)
       .step(async (value: number) => ok(value * 2))
       .step(async (value: number) => ok(value + 1));
     
@@ -120,7 +120,7 @@ describe('Operation Pipeline', () => {
   });
 
   test('pipeline execution with mixed async/sync steps', async () => {
-    const op = operation(4, 'test')
+    const op = operation('test', 4)
       .step((value: number) => ok(value * 2)) // sync
       .step(async (value: number) => ok(value + 1)) // async
       .step((value: number) => ok(value * 2)); // sync
@@ -132,7 +132,7 @@ describe('Operation Pipeline', () => {
   });
 
   test('pipeline execution with error handling', async () => {
-    const op = operation(10, 'test')
+    const op = operation('test', 10)
       .step((value: number) => err('Step failed'))
       .step((value: any) => ok(value + 1));
     
@@ -150,7 +150,7 @@ describe('Operation Pipeline', () => {
       }
     }
 
-    const op = operation(10, 'test')
+    const op = operation('test', 10)
       .failsWith(CustomError, 'Operation failed')
       .step((value: number) => err('Step failed'));
     
@@ -164,7 +164,7 @@ describe('Operation Pipeline', () => {
   });
 
   test('step method preserves types', () => {
-    const op = operation(42, 'test')
+    const op = operation('test', 42)
       .step((value: number) => ok(value.toString())) // number -> string
       .step((value: string) => ok(value.length)); // string -> number
     
@@ -173,7 +173,7 @@ describe('Operation Pipeline', () => {
   });
 
   test('context method preserves value types', () => {
-    const op = operation(42, 'initial')
+    const op = operation('initial', 42)
       .context((ctx: string, value: number) => `${ctx}-${value}`) // context: string -> string, value: number
       .context((ctx: string, value: number) => `${ctx}-processed`); // context: string -> string, value: number
     
@@ -188,21 +188,21 @@ describe('Operation Pipeline', () => {
       }
     }
 
-    const op = operation(42, 'test')
+    const op = operation('test', 42)
       .failsWith(ValidationError, 'Validation failed');
     
     expect(op).toBeDefined();
   });
 
   test('failsWith with generic error', () => {
-    const op = operation(42, 'test')
+    const op = operation('test', 42)
       .failsWith('Something went wrong');
     
     expect(op).toBeDefined();
   });
 
   test('step method with async functions', () => {
-    const op = operation(10, 'test')
+    const op = operation('test', 10)
       .step(async (value: number) => ok(value * 2))
       .step(async (value: number) => ok(value + 1));
     
@@ -214,7 +214,7 @@ describe('Operation Pipeline', () => {
   });
 
   test('context method with async functions', () => {
-    const op = operation(42, 'initial')
+    const op = operation('initial', 42)
       .context(async (ctx: string, value: number) => `${ctx}-${value}`)
       .context(async (ctx: any, value: number) => `${ctx}-processed`);
     
@@ -226,7 +226,7 @@ describe('Operation Pipeline', () => {
   });
 
   test('step method with error results', () => {
-    const op = operation(42, 'test')
+    const op = operation('test', 42)
       .step((value: number) => err('Step failed'))
       .step((value: any) => ok(value + 1));
     
@@ -238,7 +238,7 @@ describe('Operation Pipeline', () => {
   });
 
   test('context method with chaining', () => {
-    const op = operation(42, 'initial')
+    const op = operation('initial', 42)
       .context((ctx: string, value: number) => `${ctx}-updated`)
       .context((ctx: string, value: number) => `${ctx}-processed`);
     
@@ -252,20 +252,20 @@ describe('Operation Pipeline', () => {
   // Additional comprehensive tests
   describe('Edge Cases and Error Scenarios', () => {
     test('operation with no steps', () => {
-      const op = operation(42, 'test');
+      const op = operation('test', 42);
       expect(op).toBeDefined();
       expect(typeof op.complete).toBe('function');
     });
 
     test('operation with no steps - execution returns initial value', async () => {
-      const result = await operation(42, 'test').complete();
+      const result = await operation('test', 42).complete();
       
       expect(result.err).toBeUndefined();
       expect(result.res).toBe(42);
     });
 
     test('operation with single step', () => {
-      const op = operation(10, 'test')
+      const op = operation('test', 10)
         .step((value: number) => ok(value * 2));
       
       expect(op).toBeDefined();
@@ -273,7 +273,7 @@ describe('Operation Pipeline', () => {
     });
 
     test('operation with single context', () => {
-      const op = operation(42, 'initial')
+      const op = operation('initial', 42)
         .context((ctx: string, value: number) => `${ctx}-processed`);
       
       expect(op).toBeDefined();
@@ -281,7 +281,7 @@ describe('Operation Pipeline', () => {
     });
 
     test('operation with single failsWith', () => {
-      const op = operation(42, 'test')
+      const op = operation('test', 42)
         .failsWith('Single error');
       
       expect(op).toBeDefined();
@@ -295,7 +295,7 @@ describe('Operation Pipeline', () => {
         }
       }
 
-      const op = operation('hello', 0)
+      const op = operation(0, 'hello')
         .step((value: string) => ok(value.length)) // string -> number
         .context((ctx: number, value: number) => ctx + value) // context: number -> number
         .step((value: number) => ok(value.toString())) // number -> string
@@ -324,9 +324,9 @@ describe('Operation Pipeline', () => {
         }
       }
 
-      const op1 = operation(42, 'test').failsWith(ValidationError, 'Validation failed');
-      const op2 = operation(42, 'test').failsWith(NetworkError, 'Network failed');
-      const op3 = operation(42, 'test').failsWith('Generic error');
+      const op1 = operation('test', 42).failsWith(ValidationError, 'Validation failed');
+      const op2 = operation('test', 42).failsWith(NetworkError, 'Network failed');
+      const op3 = operation('test', 42).failsWith('Generic error');
       
       expect(op1).toBeDefined();
       expect(op2).toBeDefined();
@@ -339,7 +339,7 @@ describe('Operation Pipeline', () => {
         name: string;
       }
 
-      const op = operation('test', 'initial')
+      const op = operation('initial', 'test')
         .step((value: string) => ok({ id: 1, name: value } as User))
         .step((value: User) => ok(value.name))
         .step((value: string) => ok(value.length));
@@ -353,7 +353,7 @@ describe('Operation Pipeline', () => {
         timeout: number;
       }
 
-      const op = operation(42, 'test')
+      const op = operation('test', 42)
         .context((ctx: any, value: any) => ({ ...ctx, apiUrl: value }))
         .context((ctx: any, value: any) => ({ ...ctx, timeout: 5000 }));
       
@@ -361,7 +361,7 @@ describe('Operation Pipeline', () => {
     });
 
     test('mixed async and sync steps', () => {
-      const op = operation(42, 'test')
+      const op = operation('test', 42)
         .step((value: number) => ok(value * 2)) // sync
         .step(async (value: number) => ok(value + 1)) // async
         .step((value: number) => ok(value.toString())) // sync
@@ -371,7 +371,7 @@ describe('Operation Pipeline', () => {
     });
 
     test('mixed async and sync context', () => {
-      const op = operation(42, 'test')
+      const op = operation('test', 42)
         .context((ctx: string, value: number) => `${ctx}-${value}`) // sync
         .context(async (ctx: any, value: number) => `${ctx}-async`) // async
         .context((ctx: any, value: number) => `${ctx}-final`); // sync
@@ -380,7 +380,7 @@ describe('Operation Pipeline', () => {
     });
 
     test('step with Error result', () => {
-      const op = operation(42, 'test')
+      const op = operation('test', 42)
         .step((value: number) => err(new Error('Custom error')))
         .step((value: any) => ok(value + 1));
       
@@ -388,7 +388,7 @@ describe('Operation Pipeline', () => {
     });
 
     test('context with Error result', () => {
-      const op = operation(42, 'test')
+      const op = operation('test', 42)
         .context((ctx: string, value: number) => err(new Error('Context error')))
         .context((ctx: any, value: number) => `${ctx}-processed`);
       
@@ -396,7 +396,7 @@ describe('Operation Pipeline', () => {
     });
 
     test('step with string error', () => {
-      const op = operation(42, 'test')
+      const op = operation('test', 42)
         .step((value: number) => err('String error'))
         .step((value: any) => ok(value + 1));
       
@@ -404,7 +404,7 @@ describe('Operation Pipeline', () => {
     });
 
     test('context with multiple transformations', () => {
-      const op = operation(42, 'test')
+      const op = operation('test', 42)
         .context((ctx: string, value: number) => `${ctx}-${value}`)
         .context((ctx: string, value: number) => `${ctx}-processed`);
       
@@ -412,7 +412,7 @@ describe('Operation Pipeline', () => {
     });
 
     test('unexpected error during step execution', async () => {
-      const op = operation(10, 'test')
+      const op = operation('test', 10)
         .step((value: number) => {
           // Simulate unexpected error (not a Result)
           throw new Error('Unexpected step error');
@@ -426,7 +426,7 @@ describe('Operation Pipeline', () => {
     });
 
     test('unexpected error during context execution', async () => {
-      const op = operation(10, 'test')
+      const op = operation('test', 10)
         .context((ctx: string, value: number) => {
           // Simulate unexpected error (not a Result)
           throw new Error('Unexpected context error');
@@ -440,7 +440,7 @@ describe('Operation Pipeline', () => {
     });
 
     test('unexpected non-Error during execution', async () => {
-      const op = operation(10, 'test')
+      const op = operation('test', 10)
         .step((value: number) => {
           // Simulate unexpected non-Error
           throw 'String error';
@@ -460,7 +460,7 @@ describe('Operation Pipeline', () => {
         }
       }
 
-      const op = operation(10, 'test')
+      const op = operation('test', 10)
         .failsWith(CustomError, 'Operation failed')
         .step((value: number) => {
           throw new Error('Step failed');
@@ -482,7 +482,7 @@ describe('Operation Pipeline', () => {
         metadata: Record<string, any>;
       }
 
-      const result = await operation({ id: 1, data: ['a', 'b'], metadata: { key: 'value' } }, 'test')
+      const result = await operation('test', { id: 1, data: ['a', 'b'], metadata: { key: 'value' } })
         .step((value: ComplexData) => ok({ ...value, id: value.id + 1 }))
         .context((ctx: string, value: ComplexData) => `${ctx}-${value.id}`)
         .step((value: ComplexData) => ok(value.data.length))
@@ -493,7 +493,7 @@ describe('Operation Pipeline', () => {
     });
 
     test('operation with null and undefined values', async () => {
-      const result = await operation(null, undefined)
+      const result = await operation(undefined, null)
         .step((value: null) => ok('processed'))
         .context((ctx: undefined, value: string) => 'context')
         .complete();
@@ -503,7 +503,7 @@ describe('Operation Pipeline', () => {
     });
 
     test('operation with empty arrays and objects', async () => {
-      const result = await operation([], {})
+      const result = await operation({}, [])
         .step((value: any[]) => ok(value.length))
         .context((ctx: any, value: number) => ({ ...ctx, count: value }))
         .step((value: number) => ok(value === 0))
@@ -520,7 +520,7 @@ describe('Operation Pipeline', () => {
         }
       }
 
-      const op = operation(42, 'test')
+      const op = operation('test', 42)
         .failsWith(SimpleError, 'Simple error message');
       
       expect(op).toBeDefined();
@@ -535,7 +535,7 @@ describe('Operation Pipeline', () => {
         }
       }
 
-      const op = operation(42, 'test')
+      const op = operation('test', 42)
         .failsWith(ProperError, 'Proper error');
       
       expect(op).toBeDefined();
@@ -549,7 +549,7 @@ describe('Operation Pipeline', () => {
         }
       }
 
-      const op = operation(10, 'test')
+      const op = operation('test', 10)
         .failsWith(CustomError, 'Custom operation failed')
         .step((value: number) => err('Step failed'));
 
@@ -563,7 +563,7 @@ describe('Operation Pipeline', () => {
     });
 
     test('error transformation with generic error execution', async () => {
-      const op = operation(10, 'test')
+      const op = operation('test', 10)
         .failsWith('Generic operation failed')
         .step((value: number) => err('Step failed'));
 
@@ -580,7 +580,7 @@ describe('Operation Pipeline', () => {
   describe('Type Safety Tests', () => {
     test('step function parameter types', () => {
       // This test ensures TypeScript can infer the correct types
-      const op = operation(42, 'test')
+      const op = operation('test', 42)
         .step((value: number, context: string) => {
           expect(typeof value).toBe('number');
           expect(typeof context).toBe('string');
@@ -592,7 +592,7 @@ describe('Operation Pipeline', () => {
 
     test('context function parameter types', () => {
       // This test ensures TypeScript can infer the correct types
-      const op = operation(42, 'test')
+      const op = operation('test', 42)
         .context((context: string, value: number) => {
           expect(typeof context).toBe('string');
           expect(typeof value).toBe('number');
@@ -609,7 +609,7 @@ describe('Operation Pipeline', () => {
         }
       }
 
-      const op = operation(42, 'test')
+      const op = operation('test', 42)
         .failsWith(CustomError, 'Custom error message');
       
       expect(op).toBeDefined();
@@ -617,7 +617,7 @@ describe('Operation Pipeline', () => {
     });
 
     test('operation state immutability', () => {
-      const op1 = operation(42, 'test').step((value: number) => ok(value * 2));
+      const op1 = operation('test', 42).step((value: number) => ok(value * 2));
       const op2 = op1.step((value: number) => ok(value + 1));
       
       // Each operation should be a new instance
@@ -629,7 +629,7 @@ describe('Operation Pipeline', () => {
 
   describe('Method Chaining Behavior', () => {
     test('step chaining returns new operation', () => {
-      const op1 = operation(42, 'test');
+      const op1 = operation('test', 42);
       const op2 = op1.step((value: number) => ok(value * 2));
       const op3 = op2.step((value: number) => ok(value + 1));
       
@@ -641,7 +641,7 @@ describe('Operation Pipeline', () => {
     });
 
     test('context chaining returns new operation', () => {
-      const op1 = operation(42, 'test');
+      const op1 = operation('test', 42);
       const op2 = op1.context((ctx: string, value: number) => `${ctx}-${value}`);
       const op3 = op2.context((ctx: string, value: number) => `${ctx}-processed`);
       
@@ -653,7 +653,7 @@ describe('Operation Pipeline', () => {
     });
 
     test('failsWith chaining returns new operation', () => {
-      const op1 = operation(42, 'test');
+      const op1 = operation('test', 42);
       const op2 = op1.failsWith('First error');
       const op3 = op2.failsWith('Second error');
       
@@ -665,7 +665,7 @@ describe('Operation Pipeline', () => {
     });
 
     test('mixed chaining returns new operations', () => {
-      const op1 = operation(42, 'test');
+      const op1 = operation('test', 42);
       const op2 = op1.step((value: number) => ok(value * 2));
       const op3 = op2.context((ctx: string, value: number) => `${ctx}-${value}`);
       const op4 = op3.failsWith('Mixed error');
@@ -686,7 +686,7 @@ describe('makeOperation Factory', () => {
     const factory = makeOperation((result: Result<any>) => result);
     expect(typeof factory).toBe('function');
     
-    const op = factory(10, 'context');
+    const op = factory('context', 10);
     expect(op).toBeDefined();
     expect(typeof op.step).toBe('function');
     expect(typeof op.context).toBe('function');
@@ -703,7 +703,7 @@ describe('makeOperation Factory', () => {
       return { custom: true, result };
     });
 
-    const result = await factory(10, { test: 'context' })
+    const result = await factory({ test: 'context' }, 10)
       .step((value: number) => ok(value * 2))
       .complete();
 
@@ -723,7 +723,7 @@ describe('makeOperation Factory', () => {
       return { success: true, value: result.res };
     });
 
-    const result = await factory(5, 'ctx')
+    const result = await factory('ctx', 5)
       .step((value: number) => ok(value * 3))
       .complete();
 
@@ -738,7 +738,7 @@ describe('makeOperation Factory', () => {
       return { value: result.res };
     });
 
-    const result = await factory(10, 'ctx')
+    const result = await factory('ctx', 10)
       .step((value: number) => err('Something failed'))
       .complete();
 
@@ -761,7 +761,7 @@ describe('makeOperation Factory', () => {
       json: (data, status = 200) => ({ body: data, status })
     };
 
-    const result = await honoFactory(42, { honoCtx: mockHonoCtx })
+    const result = await honoFactory({ honoCtx: mockHonoCtx }, 42)
       .step((value: number) => ok(value * 2))
       .complete();
 
@@ -784,7 +784,7 @@ describe('makeOperation Factory', () => {
       json: (data, status = 200) => ({ body: data, status })
     };
 
-    const result = await honoFactory(42, { honoCtx: mockHonoCtx })
+    const result = await honoFactory({ honoCtx: mockHonoCtx }, 42)
       .step((value: number) => err('Failed'))
       .complete();
 
@@ -801,7 +801,7 @@ describe('makeOperation Factory', () => {
       return { value: result.res, context: context.value };
     });
 
-    const result = await factory(5, { value: 'initial' })
+    const result = await factory({ value: 'initial' }, 5)
       .step((value: number) => ok(value * 2))
       .context((ctx: TestContext, value: number) => ({ value: `${ctx.value}-${value}` }))
       .step((value: number) => ok(value + 1))
@@ -825,7 +825,7 @@ describe('makeOperation Factory', () => {
       return { value: result.res };
     });
 
-    const result = await factory(10, 'ctx')
+    const result = await factory('ctx', 10)
       .failsWith(CustomError, 'Custom error occurred')
       .step((value: number) => err('Internal error'))
       .complete();
@@ -851,7 +851,7 @@ describe('makeOperation Factory', () => {
       };
     });
 
-    const result = await factory(100, { userId: 'user123', requestId: 'req456' })
+    const result = await factory({ userId: 'user123', requestId: 'req456' }, 100)
       .step((value: number) => ok(value / 2))
       .complete();
 
@@ -882,7 +882,7 @@ describe('makeOperation Factory', () => {
       return { value: result.res };
     });
 
-    const result = await factory(5, 'ctx')
+    const result = await factory('ctx', 5)
       .step(async (value: number) => ok(value * 2))
       .step((value: number) => ok(value + 10))
       .step(async (value: number) => ok(value * 3))
@@ -899,7 +899,7 @@ describe('makeOperation Factory', () => {
       };
     });
 
-    const result = await factory(10, 'initial')
+    const result = await factory('initial', 10)
       .step((value: number) => ok(value * 2))
       .context((ctx: string, value: number) => `${ctx}-step1-${value}`)
       .step((value: number) => ok(value + 5))
@@ -918,11 +918,11 @@ describe('makeOperation Factory', () => {
       return { value: result.res };
     });
 
-    const result1 = await factory(10, 'ctx1')
+    const result1 = await factory('ctx1', 10)
       .step((value: number) => ok(value * 2))
       .complete();
 
-    const result2 = await factory(20, 'ctx2')
+    const result2 = await factory('ctx2', 20)
       .step((value: number) => ok(value * 3))
       .complete();
 

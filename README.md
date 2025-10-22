@@ -56,7 +56,7 @@ Chain operations with fail-fast error handling and context management.
 ```typescript
 import { operation, ok, err } from '@uglyunicorn/amino';
 
-const result = await operation(10, 'context')
+const result = await operation('context', 10)
   .step((value: number) => ok(value * 2))
   .step((value: number) => ok(value + 1))
   .complete();
@@ -71,7 +71,7 @@ if (result.err === undefined) {
 #### 1. Fail-Fast Error Handling
 
 ```typescript
-const result = await operation(10)
+const result = await operation()
   .step((value: number) => ok(value * 2))
   .step((value: number) => err('Failed!'))
   .step((value: number) => ok(value + 1)) // Skipped
@@ -83,7 +83,7 @@ const result = await operation(10)
 #### 2. Context Management
 
 ```typescript
-const result = await operation(5, 'initial')
+const result = await operation('initial', 5)
   .step((value: number) => ok(value * 2))
   .context((ctx: string, value: number) => `${ctx}-processed`)
   .step((value: number) => ok(value + 1))
@@ -99,7 +99,7 @@ class ValidationError extends Error {
   }
 }
 
-const result = await operation(10)
+const result = await operation()
   .failsWith(ValidationError, 'Validation failed')
   .step((value: number) => err('Invalid input'))
   .complete();
@@ -110,7 +110,7 @@ const result = await operation(10)
 #### 4. Async Operations
 
 ```typescript
-const result = await operation(3)
+const result = await operation()
   .step((value: number) => ok(value * 2))        // sync
   .step(async (value: number) => ok(value + 1))  // async
   .step((value: number) => ok(value * 2))        // sync
@@ -122,7 +122,7 @@ const result = await operation(3)
 TypeScript infers types throughout the chain:
 
 ```typescript
-const result = await operation(42)
+const result = await operation()
   .step((value: number) => ok(value.toString()))  // number -> string
   .step((value: string) => ok(value.length))      // string -> number
   .step((value: number) => ok(value > 0))         // number -> boolean
@@ -156,7 +156,7 @@ const honoOperation = makeOperation(
 
 // Use in a Hono route handler
 app.get('/users/:id', async (c) => {
-  return await honoOperation(undefined, { honoCtx: c })
+  return await honoOperation({ honoCtx: c }, undefined)
     .step(() => validateUserId(c.req.param('id')))
     .step((userId: string) => fetchUser(userId))
     .step((user: User) => enrichUserData(user))
@@ -180,7 +180,7 @@ This enables seamless integration with any framework or custom return type requi
 
 ### Operation
 
-- `operation<V, C>(value?: V, context?: C)` - Create operation pipeline
+- `operation<C, V>(context?: C, value?: V)` - Create operation pipeline
 - `makeOperation<C, E, R>(handler)` - Create operation factory with custom completion
 - `.step<NV>(fn: (value: V, context: C) => Result<NV>)` - Add processing step
 - `.context<NC>(fn: (context: C, value: V) => NC)` - Transform context
