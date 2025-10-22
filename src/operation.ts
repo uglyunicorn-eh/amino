@@ -156,7 +156,7 @@ class OperationImpl<V, C, E extends Error = Error> implements Operation<V, C, E>
       let currentValue: any = initialValue;
       let currentContext: any = initialContext;
 
-      // Execute each step in sequence - no if statements needed!
+      // Execute each step in sequence, checking for errors at each step.
       for (const { fn } of steps) {
         const { err: error, res } = await fn(currentContext, currentValue);
         
