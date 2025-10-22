@@ -1,4 +1,4 @@
-# @uglyunicorn/amino
+# Amino
 
 A lightweight, type-safe Result pattern implementation for TypeScript.
 
