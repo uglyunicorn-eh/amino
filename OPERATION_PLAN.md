@@ -26,17 +26,17 @@ Context → Context → Context → Context
 ```typescript
 // Basic usage
 const result = await operation(input, initialContext)
-  .step((ctx, value) => processValue(value))
+  .step((value, ctx) => processValue(value))
   .context((ctx, value) => updateContext(ctx, value))
-  .step((ctx, value) => anotherProcess(value))
+  .step((value, ctx) => anotherProcess(value))
   .complete();
 
 // With mixed sync/async steps
 const result = await operation(input, context)
-  .step((ctx, value) => validateInput(value))     // Sync
-  .step(async (ctx, value) => fetchData(value))   // Async
-  .step((ctx, value) => transformData(value))     // Sync
-  .step(async (ctx, value) => saveData(value))    // Async
+  .step((value, ctx) => validateInput(value))     // Sync
+  .step(async (value, ctx) => fetchData(value))    // Async
+  .step((value, ctx) => transformData(value))      // Sync
+  .step(async (value, ctx) => saveData(value))     // Async
   .complete();
 ```
 
@@ -46,8 +46,8 @@ const result = await operation(input, context)
 
 #### Step 1: Define Core Types
 - `Operation<V, C>` - Main operation interface (V=value, C=context)
-- `StepFunction<V, NV, C>` - Function signature for steps (V=value, NV=new value, C=context)
-- `ContextFunction<V, C, NC>` - Function signature for context updates (V=value, C=context, NC=new context)
+- `StepFunction<V, NV, C>` - Function signature for steps (value first, context second)
+- `ContextFunction<V, C, NC>` - Function signature for context updates (context first, value second)
 - Internal step representation as linked list
 
 #### Step 2: Implement Entry Point
@@ -106,10 +106,10 @@ const result = await operation(input, context)
 ## Type Definitions
 
 ```typescript
-// Step function signatures
-type StepFunction<V, NV, C> = (context: C, value: V) => Result<NV> | AsyncResult<NV>;
+// Step function signatures - value first, context second
+type StepFunction<V, NV, C> = (value: V, context: C) => Result<NV> | AsyncResult<NV>;
 
-// Context function signatures  
+// Context function signatures - context first, value second
 type ContextFunction<V, C, NC> = (context: C, value: V) => Result<NC> | AsyncResult<NC>;
 
 // Operation interface
