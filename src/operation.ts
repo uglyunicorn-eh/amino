@@ -96,3 +96,77 @@ export type OperationState<V, C, E = Error> = {
   initialValue?: V;
   initialContext?: C;
 };
+
+/**
+ * Internal operation implementation class
+ */
+class OperationImpl<V, C, E = Error> implements Operation<V, C, E> {
+  constructor(private state: OperationState<V, C, E>) {}
+
+  step<NV>(fn: StepFunction<V, NV, C>): Operation<NV, C, E> {
+    const newSteps = [...this.state.steps, { type: 'step' as const, fn } as PipelineStep<V, NV, C>];
+    return new OperationImpl<NV, C, E>({
+      steps: newSteps,
+      errorTransformer: this.state.errorTransformer,
+      initialValue: undefined, // Will be set during execution
+      initialContext: this.state.initialContext,
+    });
+  }
+
+  context<NC>(fn: ContextFunction<V, C, NC>): Operation<V, NC, E> {
+    const newSteps = [...this.state.steps, { type: 'context' as const, fn } as PipelineContextStep<V, C, NC>];
+    return new OperationImpl<V, NC, E>({
+      steps: newSteps,
+      errorTransformer: this.state.errorTransformer,
+      initialValue: this.state.initialValue,
+      initialContext: undefined, // Will be set during execution
+    });
+  }
+
+  failsWith<NE>(errorClass: new (message: string, cause?: Error) => NE, message: string): Operation<V, C, NE>;
+  failsWith(message: string): Operation<V, C, Error>;
+  failsWith<NE>(errorClassOrMessage: new (message: string, cause?: Error) => NE | string, message?: string): Operation<V, C, NE> | Operation<V, C, Error> {
+    if (typeof errorClassOrMessage === 'string') {
+      // Generic error with message
+      const errorTransformer: ErrorTransformer<Error> = (originalError: Error) => {
+        const newError = new Error(errorClassOrMessage);
+        newError.cause = originalError;
+        return newError;
+      };
+      
+      return new OperationImpl<V, C, Error>({
+        steps: this.state.steps,
+        errorTransformer,
+        initialValue: this.state.initialValue,
+        initialContext: this.state.initialContext,
+      });
+    } else {
+      // Custom error class with message
+      const errorTransformer: ErrorTransformer<NE> = (originalError: Error): NE => {
+        return new errorClassOrMessage(message!, originalError);
+      };
+      
+      return new OperationImpl<V, C, NE>({
+        steps: this.state.steps,
+        errorTransformer,
+        initialValue: this.state.initialValue,
+        initialContext: this.state.initialContext,
+      });
+    }
+  }
+
+  complete(): AsyncResult<V, E> {
+    // For now, return a placeholder - we'll implement execution in Step 6
+    throw new Error('Pipeline execution not yet implemented');
+  }
+}
+
+/**
+ * Creates a new operation pipeline
+ * @returns A new operation instance
+ */
+export function operation(): Operation<any, any, Error> {
+  return new OperationImpl<any, any, Error>({
+    steps: [],
+  });
+}
