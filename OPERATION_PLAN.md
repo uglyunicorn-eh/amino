@@ -25,14 +25,14 @@ Context → Context → Context → Context
 
 ```typescript
 // Basic usage
-const result = await operation(initialContext, input)
+const result = await operation()
   .step((value, ctx) => processValue(value))
   .context((ctx, value) => updateContext(ctx, value))
   .step((value, ctx) => anotherProcess(value))
   .complete();
 
 // With mixed sync/async steps
-const result = await operation(context, input)
+const result = await operation()
   .step((value, ctx) => validateInput(value))     // Sync
   .step(async (value, ctx) => fetchData(value))    // Async
   .step((value, ctx) => transformData(value))      // Sync
@@ -51,7 +51,7 @@ const result = await operation(context, input)
 - Internal step representation as linked list
 
 #### Step 2: Implement Entry Point
-- `operation<C, V>(context: C, value: V)` - Creates initial operation (context first)
+- `operation()` - Creates initial operation (no arguments for now)
 - Basic operation builder with initial state
 
 ### Phase 2: Pipeline Methods
@@ -127,23 +127,16 @@ interface Operation<V, C> {
 **Test thoroughly:** After each phase
 **Document as we go:** Keep examples updated
 
-## Benefits of Context-First Design
+## Benefits of No-Arguments Design
 
-✅ **More composable** - Create context-specific operations:
-```typescript
-const processUser = operation(userContext);
-const result = await processUser(userData)
-  .step((user, ctx) => validateUser(user))
-  .complete();
-```
-
-✅ **Consistent with context functions** - `context(ctx, value)`  
-✅ **Functional style** - Context as "environment"  
-✅ **Better partial application** - `const withContext = operation(ctx)`  
+✅ **Simpler initial implementation** - Focus on core pipeline logic  
+✅ **Cleaner API** - Start with minimal surface area  
+✅ **Easier to extend later** - Can add parameters when needed  
+✅ **Less complexity** - No initial value/context management  
 
 ## Questions for Refinement
 
-1. **Context initialization**: How do we create the initial context?
+1. **Initial value/context**: How do we provide initial values? (via first step?)
 2. **Error handling**: Should we provide custom error transformation?
 3. **Step naming**: Do steps need names for debugging?
 4. **Parallel steps**: Any need for parallel execution?
