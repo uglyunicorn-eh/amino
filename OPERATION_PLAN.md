@@ -45,20 +45,20 @@ const result = await operation(input, context)
 ### Phase 1: Core Foundation (Types & Entry Point)
 
 #### Step 1: Define Core Types
-- `Operation<T, C>` - Main operation interface
-- `StepFunction<T, U, C>` - Function signature for steps (sync/async)
-- `ContextFunction<T, C, D>` - Function signature for context updates
+- `Operation<V, C>` - Main operation interface (V=value, C=context)
+- `StepFunction<V, NV, C>` - Function signature for steps (V=value, NV=new value, C=context)
+- `ContextFunction<V, C, NC>` - Function signature for context updates (V=value, C=context, NC=new context)
 - Internal step representation as linked list
 
 #### Step 2: Implement Entry Point
-- `operation<T, C>(value: T, context: C)` - Creates initial operation
+- `operation<V, C>(value: V, context: C)` - Creates initial operation
 - Basic operation builder with initial state
 
 ### Phase 2: Pipeline Methods
 
 #### Step 3: Implement .step() Method
 - Add processing step to pipeline
-- Handle both `Result<T>` and `AsyncResult<T>` returns
+- Handle both `Result<NV>` and `AsyncResult<NV>` returns
 - Type-safe chaining with proper generics
 
 #### Step 4: Implement .context() Method
@@ -69,7 +69,7 @@ const result = await operation(input, context)
 #### Step 5: Implement .complete() Method
 - Execute entire pipeline sequentially
 - Handle mixed sync/async steps
-- Return final `AsyncResult<T>`
+- Return final `AsyncResult<V>`
 
 ### Phase 3: Execution Engine
 
@@ -107,16 +107,16 @@ const result = await operation(input, context)
 
 ```typescript
 // Step function signatures
-type StepFunction<T, U, C> = (context: C, value: T) => Result<U> | AsyncResult<U>;
+type StepFunction<V, NV, C> = (context: C, value: V) => Result<NV> | AsyncResult<NV>;
 
 // Context function signatures  
-type ContextFunction<T, C, D> = (context: C, value: T) => Result<D> | AsyncResult<D>;
+type ContextFunction<V, C, NC> = (context: C, value: V) => Result<NC> | AsyncResult<NC>;
 
 // Operation interface
-interface Operation<T, C> {
-  step<U>(fn: StepFunction<T, U, C>): Operation<U, C>;
-  context<D>(fn: ContextFunction<T, C, D>): Operation<T, D>;
-  complete(): AsyncResult<T>; // Always async since steps can be async
+interface Operation<V, C> {
+  step<NV>(fn: StepFunction<V, NV, C>): Operation<NV, C>;
+  context<NC>(fn: ContextFunction<V, C, NC>): Operation<V, NC>;
+  complete(): AsyncResult<V>; // Always async since steps can be async
 }
 ```
 
