@@ -21,12 +21,12 @@ export type ContextFunction<V, C, NC> = (context: C, value: V) => Result<NC> | A
  * @param originalError - The original error
  * @returns New error instance
  */
-export type ErrorTransformer<E> = (originalError: Error) => E;
+type ErrorTransformer<E> = (originalError: Error) => E;
 
 /**
  * Internal step representation for the pipeline
  */
-export type PipelineStep<V, NV, C> = {
+type PipelineStep<V, NV, C> = {
   type: 'step';
   fn: StepFunction<V, NV, C>;
 };
@@ -34,7 +34,7 @@ export type PipelineStep<V, NV, C> = {
 /**
  * Internal context step representation for the pipeline
  */
-export type PipelineContextStep<V, C, NC> = {
+type PipelineContextStep<V, C, NC> = {
   type: 'context';
   fn: ContextFunction<V, C, NC>;
 };
@@ -42,7 +42,7 @@ export type PipelineContextStep<V, C, NC> = {
 /**
  * Union type for all pipeline steps
  */
-export type AnyPipelineStep = PipelineStep<any, any, any> | PipelineContextStep<any, any, any>;
+type AnyPipelineStep = PipelineStep<any, any, any> | PipelineContextStep<any, any, any>;
 
 /**
  * Operation interface - chainable pipeline builder
@@ -83,7 +83,7 @@ export interface Operation<V, C, E = Error> {
 /**
  * Internal operation state
  */
-export type OperationState<V, C, E = Error> = {
+type OperationState<V, C, E = Error> = {
   steps: AnyPipelineStep[];
   errorTransformer?: ErrorTransformer<E>;
   initialValue?: V;
