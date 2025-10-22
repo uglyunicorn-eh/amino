@@ -26,17 +26,17 @@ Context → Context → Context → Context
 ```typescript
 // Basic usage
 const result = await operation(input, initialContext)
-  .step((value, ctx) => processValue(value))
+  .step((ctx, value) => processValue(value))
   .context((ctx, value) => updateContext(ctx, value))
-  .step((value, ctx) => anotherProcess(value))
+  .step((ctx, value) => anotherProcess(value))
   .complete();
 
 // With mixed sync/async steps
 const result = await operation(input, context)
-  .step((value, ctx) => validateInput(value))     // Sync
-  .step(async (value, ctx) => fetchData(value))   // Async
-  .step((value, ctx) => transformData(value))     // Sync
-  .step(async (value, ctx) => saveData(value))    // Async
+  .step((ctx, value) => validateInput(value))     // Sync
+  .step(async (ctx, value) => fetchData(value))   // Async
+  .step((ctx, value) => transformData(value))     // Sync
+  .step(async (ctx, value) => saveData(value))    // Async
   .complete();
 ```
 
@@ -107,7 +107,7 @@ const result = await operation(input, context)
 
 ```typescript
 // Step function signatures
-type StepFunction<T, U, C> = (value: T, context: C) => Result<U> | AsyncResult<U>;
+type StepFunction<T, U, C> = (context: C, value: T) => Result<U> | AsyncResult<U>;
 
 // Context function signatures  
 type ContextFunction<T, C, D> = (context: C, value: T) => Result<D> | AsyncResult<D>;
