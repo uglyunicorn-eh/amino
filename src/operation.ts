@@ -86,7 +86,9 @@ class OperationImpl<V, C, E extends Error = Error> implements Operation<V, C, E>
     
     // Convert step function to unified pipeline function
     const pipelineFn: PipelineFunction<V, NV, C, C> = async (context: C, value: V) => {
-      const { err: error, res } = await fn(value, context);
+      const result = fn(value, context);
+      const awaited = (result && typeof (result as any).then === 'function') ? await result : result;
+      const { err: error, res } = awaited;
       return error !== undefined ? err(error) : ok({ context, value: res });
     };
 
