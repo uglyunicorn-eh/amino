@@ -67,18 +67,11 @@ export interface Operation<V, C, E = Error> {
 
   /**
    * Set error transformation for the operation
-   * @param errorClass - Error class constructor
-   * @param message - Error message
+   * @param errorClassOrMessage - Error class constructor or message string
+   * @param message - Error message (required when errorClassOrMessage is a constructor)
    * @returns New operation with updated error type
    */
-  failsWith<NE>(errorClass: new (message: string, cause?: Error) => NE, message: string): Operation<V, C, NE>;
-
-  /**
-   * Set error transformation for the operation (generic Error)
-   * @param message - Error message
-   * @returns New operation with Error type
-   */
-  failsWith(message: string): Operation<V, C, Error>;
+  failsWith<NE>(errorClassOrMessage: new (message: string, cause?: Error) => NE | string, message?: string): Operation<V, C, NE> | Operation<V, C, Error>;
 
   /**
    * Execute the pipeline and return the final result
@@ -123,17 +116,11 @@ class OperationImpl<V, C, E = Error> implements Operation<V, C, E> {
     });
   }
 
-  // @ts-ignore - Temporary fix for overload signature compatibility
-  failsWith<NE>(errorClass: new (message: string, cause?: Error) => NE, message: string): Operation<V, C, NE>;
-  // @ts-ignore - Temporary fix for overload signature compatibility
-  failsWith(message: string): Operation<V, C, Error>;
   failsWith<NE>(errorClassOrMessage: new (message: string, cause?: Error) => NE | string, message?: string): Operation<V, C, NE> | Operation<V, C, Error> {
     if (typeof errorClassOrMessage === 'string') {
       // Generic error with message
       const errorTransformer: ErrorTransformer<Error> = (originalError: Error) => {
-        const newError = new Error(errorClassOrMessage);
-        newError.cause = originalError;
-        return newError;
+        return new Error(errorClassOrMessage, { cause: originalError });
       };
       
       return new OperationImpl<V, C, Error>({
@@ -144,10 +131,8 @@ class OperationImpl<V, C, E = Error> implements Operation<V, C, E> {
       });
     } else {
       // Custom error class with message
-      // @ts-ignore - Temporary fix for type compatibility
       const errorTransformer: ErrorTransformer<NE> = (originalError: Error): NE => {
-        // @ts-ignore - Temporary fix for type compatibility
-        return new errorClassOrMessage(message!, originalError);
+        return new (errorClassOrMessage as new (message: string, cause?: Error) => NE)(message!, originalError);
       };
       
       return new OperationImpl<V, C, NE>({

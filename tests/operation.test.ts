@@ -39,8 +39,7 @@ describe('Operation Pipeline', () => {
   test('can chain failsWith methods', () => {
     class CustomError extends Error {
       constructor(message: string, cause?: Error) {
-        super(message);
-        this.cause = cause;
+        super(message, { cause });
       }
     }
 
@@ -58,8 +57,7 @@ describe('Operation Pipeline', () => {
   test('can mix step, context, and failsWith methods', () => {
     class CustomError extends Error {
       constructor(message: string, cause?: Error) {
-        super(message);
-        this.cause = cause;
+        super(message, { cause });
       }
     }
 
@@ -110,8 +108,7 @@ describe('Operation Pipeline', () => {
   test('failsWith with custom error class', () => {
     class ValidationError extends Error {
       constructor(message: string, cause?: Error) {
-        super(message);
-        this.cause = cause;
+        super(message, { cause });
       }
     }
 
