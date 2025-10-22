@@ -183,11 +183,11 @@ class OperationImpl<V, C, E extends Error = Error> implements Operation<V, C, E>
 
 /**
  * Creates a new operation pipeline
- * @param initialValue - Initial value to start the pipeline with
- * @param initialContext - Initial context for the pipeline
+ * @param initialValue - Optional initial value to start the pipeline with
+ * @param initialContext - Optional initial context for the pipeline
  * @returns A new operation instance
  */
-export function operation<V, C>(initialValue: V, initialContext: C): Operation<V, C, Error> {
+export function operation<V = unknown, C = unknown>(initialValue?: V, initialContext?: C): Operation<V, C, Error> {
   return new OperationImpl<V, C, Error>({
     steps: [],
     initialValue,

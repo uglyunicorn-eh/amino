@@ -12,6 +12,16 @@ describe('Operation Pipeline', () => {
     expect(typeof op.complete).toBe('function');
   });
 
+  test('creates operation instance with optional arguments', () => {
+    const op1 = operation();
+    const op2 = operation(42);
+    const op3 = operation(undefined, 'context');
+    
+    expect(op1).toBeDefined();
+    expect(op2).toBeDefined();
+    expect(op3).toBeDefined();
+  });
+
   test('can chain step methods', () => {
     const op = operation(10, 'test-context')
       .step((value: number) => ok(value * 2))

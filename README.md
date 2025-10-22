@@ -129,6 +129,19 @@ if (result.err !== undefined) {
 }
 ```
 
+#### Optional Arguments
+
+```typescript
+// Create operation without initial values
+const op1 = operation();
+
+// With only initial value
+const op2 = operation(42);
+
+// With both value and context
+const op3 = operation(42, 'initial-context');
+```
+
 #### Async Operations
 
 ```typescript
