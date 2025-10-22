@@ -131,6 +131,45 @@ const result = await operation(42)
 // result.res is typed as boolean
 ```
 
+## Advanced Usage
+
+### Custom Completion with `makeOperation`
+
+Create operation factories with custom completion handlers for framework integrations:
+
+```typescript
+import { makeOperation, ok, err, type Result } from '@uglyunicorn/amino';
+
+// Example: Hono framework integration
+interface HonoContext {
+  json: (data: any, status?: number) => Response;
+}
+
+const honoOperation = makeOperation(
+  (result: Result<any>, context: { honoCtx: HonoContext }) => {
+    if (result.err !== undefined) {
+      return context.honoCtx.json({ error: result.err.message }, 500);
+    }
+    return context.honoCtx.json(result.res);
+  }
+);
+
+// Use in a Hono route handler
+app.get('/users/:id', async (c) => {
+  return await honoOperation(undefined, { honoCtx: c })
+    .step(() => validateUserId(c.req.param('id')))
+    .step((userId: string) => fetchUser(userId))
+    .step((user: User) => enrichUserData(user))
+    .complete(); // Returns Hono Response directly
+});
+```
+
+The completion handler receives:
+- `result`: The final `Result<V, E>` from the pipeline
+- `context`: The final operation context (after all `.context()` transformations)
+
+This enables seamless integration with any framework or custom return type requirements.
+
 ## API
 
 ### Result Functions
@@ -142,10 +181,11 @@ const result = await operation(42)
 ### Operation
 
 - `operation<V, C>(value?: V, context?: C)` - Create operation pipeline
+- `makeOperation<C, E, R>(handler)` - Create operation factory with custom completion
 - `.step<NV>(fn: (value: V, context: C) => Result<NV>)` - Add processing step
 - `.context<NC>(fn: (context: C, value: V) => NC)` - Transform context
 - `.failsWith<E>(ErrorClass, message)` - Set custom error type
-- `.complete()` - Execute pipeline and return Result
+- `.complete()` - Execute pipeline and return Result (or custom type)
 
 ## License
 
