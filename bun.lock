@@ -5,8 +5,6 @@
       "name": "@uglyunicorn/amino",
       "devDependencies": {
         "@types/bun": "latest",
-      },
-      "peerDependencies": {
         "typescript": "^5",
       },
     },
