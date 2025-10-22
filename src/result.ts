@@ -37,21 +37,35 @@ export function ok<T>(value: T): Success<T> {
 }
 
 /**
+ * Creates a failed result with a custom error type
+ * @param error - The error instance
+ * @returns A Fail result with the custom error type
+ */
+export function err<E extends Error>(error: E): Fail<E>;
+
+/**
+ * Creates a failed result with a string message (becomes Error)
+ * @param message - The error message string
+ * @returns A Fail result with Error type
+ */
+export function err(message: string): Fail<Error>;
+
+/**
  * Creates a failed result
  * @param error - The error (Error instance or string)
  * @returns A Fail result
  */
-export function err<E = Error>(error: E | string): Fail<E> {
+export function err<E extends Error>(error: E | string): Fail<E> | Fail<Error> {
   if (error instanceof Error) {
     return {
       res: undefined,
-      err: error as E,
+      err: error,
     };
   }
   
   // At this point, error must be a string
   return {
     res: undefined,
-    err: new Error(error as string) as E,
+    err: new Error(error),
   };
 }
