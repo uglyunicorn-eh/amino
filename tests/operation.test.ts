@@ -502,6 +502,69 @@ describe('Operation Pipeline', () => {
       expect(result.err).toBeUndefined();
       expect(result.res).toBe(true);
     });
+
+    test('failsWith with custom error class without message', () => {
+      class SimpleError extends Error {
+        constructor(message: string) {
+          super(message);
+        }
+      }
+
+      const op = operation(42, 'test')
+        .failsWith(SimpleError, 'Simple error message');
+      
+      expect(op).toBeDefined();
+      expect(typeof op.failsWith).toBe('function');
+    });
+
+    test('failsWith with error class that has different constructor signature', () => {
+      class DifferentError extends Error {
+        constructor(message: string, code: number, cause?: Error) {
+          super(message, { cause });
+          this.name = 'DifferentError';
+        }
+      }
+
+      const op = operation(42, 'test')
+        .failsWith(DifferentError, 'Different error');
+      
+      expect(op).toBeDefined();
+    });
+
+    test('error transformation with custom error class execution', async () => {
+      class CustomError extends Error {
+        constructor(message: string, cause?: Error) {
+          super(message, { cause });
+          this.name = 'CustomError';
+        }
+      }
+
+      const op = operation(10, 'test')
+        .failsWith(CustomError, 'Custom operation failed')
+        .step((value: number) => err('Step failed'));
+
+      const result = await op.complete();
+
+      expect(result.res).toBeUndefined();
+      expect(result.err).toBeInstanceOf(CustomError);
+      expect(result.err.message).toBe('Custom operation failed');
+      expect(result.err.cause).toBeInstanceOf(Error);
+      expect(result.err.cause.message).toBe('Step failed');
+    });
+
+    test('error transformation with generic error execution', async () => {
+      const op = operation(10, 'test')
+        .failsWith('Generic operation failed')
+        .step((value: number) => err('Step failed'));
+
+      const result = await op.complete();
+
+      expect(result.res).toBeUndefined();
+      expect(result.err).toBeInstanceOf(Error);
+      expect(result.err.message).toBe('Generic operation failed');
+      expect(result.err.cause).toBeInstanceOf(Error);
+      expect(result.err.cause.message).toBe('Step failed');
+    });
   });
 
   describe('Type Safety Tests', () => {
