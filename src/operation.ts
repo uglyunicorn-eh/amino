@@ -1,4 +1,4 @@
-import { type Result, type AsyncResult } from './result.ts';
+import { type Result, type AsyncResult, ok, err } from './result.ts';
 
 /**
  * Step function signature - transforms value while preserving context
@@ -101,7 +101,7 @@ class OperationImpl<V, C, E = Error> implements Operation<V, C, E> {
     return new OperationImpl<NV, C, E>({
       steps: newSteps,
       errorTransformer: this.state.errorTransformer,
-      initialValue: undefined, // Will be set during execution
+      initialValue: this.state.initialValue, // Preserve the initial value
       initialContext: this.state.initialContext,
     });
   }
@@ -112,7 +112,7 @@ class OperationImpl<V, C, E = Error> implements Operation<V, C, E> {
       steps: newSteps,
       errorTransformer: this.state.errorTransformer,
       initialValue: this.state.initialValue,
-      initialContext: undefined, // Will be set during execution
+      initialContext: this.state.initialContext, // Preserve the initial context
     });
   }
 
@@ -145,17 +145,67 @@ class OperationImpl<V, C, E = Error> implements Operation<V, C, E> {
   }
 
   complete(): AsyncResult<V, E> {
-    // For now, return a placeholder - we'll implement execution in Step 6
-    throw new Error('Pipeline execution not yet implemented');
+    return this.executePipeline();
+  }
+
+  private async executePipeline(): Promise<Result<V, E>> {
+    try {
+      let currentValue: any = this.state.initialValue;
+      let currentContext: any = this.state.initialContext;
+
+      // Execute each step in sequence
+      for (const step of this.state.steps) {
+        if (step.type === 'step') {
+          // Execute step function
+          const result = await step.fn(currentValue, currentContext);
+          
+          if (result.err !== undefined) {
+            // Step failed - apply error transformation if configured
+            const error = this.state.errorTransformer 
+              ? this.state.errorTransformer(result.err)
+              : result.err;
+            return err(error) as Result<V, E>;
+          }
+          
+          currentValue = result.res;
+        } else if (step.type === 'context') {
+          // Execute context function
+          const result = await step.fn(currentContext, currentValue);
+          
+          if (result.err !== undefined) {
+            // Context update failed - apply error transformation if configured
+            const error = this.state.errorTransformer 
+              ? this.state.errorTransformer(result.err)
+              : result.err;
+            return err(error) as Result<V, E>;
+          }
+          
+          currentContext = result.res;
+        }
+      }
+
+      // All steps completed successfully
+      return ok(currentValue);
+    } catch (error) {
+      // Unexpected error during execution
+      const transformedError = this.state.errorTransformer 
+        ? this.state.errorTransformer(error instanceof Error ? error : new Error(String(error)))
+        : (error instanceof Error ? error : new Error(String(error)));
+      return err(transformedError) as Result<V, E>;
+    }
   }
 }
 
 /**
  * Creates a new operation pipeline
+ * @param initialValue - Initial value to start the pipeline with
+ * @param initialContext - Initial context for the pipeline
  * @returns A new operation instance
  */
-export function operation(): Operation<any, any, Error> {
-  return new OperationImpl<any, any, Error>({
+export function operation<V, C>(initialValue: V, initialContext: C): Operation<V, C, Error> {
+  return new OperationImpl<V, C, Error>({
     steps: [],
+    initialValue,
+    initialContext,
   });
 }
