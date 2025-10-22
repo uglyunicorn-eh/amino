@@ -247,6 +247,13 @@ describe('Operation Pipeline', () => {
       expect(typeof op.complete).toBe('function');
     });
 
+    test('operation with no steps - execution returns initial value', async () => {
+      const result = await operation(42, 'test').complete();
+      
+      expect(result.err).toBeUndefined();
+      expect(result.res).toBe(42);
+    });
+
     test('operation with single step', () => {
       const op = operation(10, 'test')
         .step((value: number) => ok(value * 2));
@@ -392,6 +399,108 @@ describe('Operation Pipeline', () => {
         .context((ctx: string, value: number) => ok(`${ctx}-processed`));
       
       expect(op).toBeDefined();
+    });
+
+    test('unexpected error during step execution', async () => {
+      const op = operation(10, 'test')
+        .step((value: number) => {
+          // Simulate unexpected error (not a Result)
+          throw new Error('Unexpected step error');
+        });
+
+      const result = await op.complete();
+
+      expect(result.res).toBeUndefined();
+      expect(result.err).toBeInstanceOf(Error);
+      expect(result.err.message).toBe('Unexpected step error');
+    });
+
+    test('unexpected error during context execution', async () => {
+      const op = operation(10, 'test')
+        .context((ctx: string, value: number) => {
+          // Simulate unexpected error (not a Result)
+          throw new Error('Unexpected context error');
+        });
+
+      const result = await op.complete();
+
+      expect(result.res).toBeUndefined();
+      expect(result.err).toBeInstanceOf(Error);
+      expect(result.err.message).toBe('Unexpected context error');
+    });
+
+    test('unexpected non-Error during execution', async () => {
+      const op = operation(10, 'test')
+        .step((value: number) => {
+          // Simulate unexpected non-Error
+          throw 'String error';
+        });
+
+      const result = await op.complete();
+
+      expect(result.res).toBeUndefined();
+      expect(result.err).toBeInstanceOf(Error);
+      expect(result.err.message).toBe('String error');
+    });
+
+    test('unexpected error with error transformation', async () => {
+      class CustomError extends Error {
+        constructor(message: string, cause?: Error) {
+          super(message, { cause });
+        }
+      }
+
+      const op = operation(10, 'test')
+        .failsWith(CustomError, 'Operation failed')
+        .step((value: number) => {
+          throw new Error('Step failed');
+        });
+
+      const result = await op.complete();
+
+      expect(result.res).toBeUndefined();
+      expect(result.err).toBeInstanceOf(CustomError);
+      expect(result.err.message).toBe('Operation failed');
+      expect(result.err.cause).toBeInstanceOf(Error);
+      expect(result.err.cause.message).toBe('Step failed');
+    });
+
+    test('operation with complex data types', async () => {
+      interface ComplexData {
+        id: number;
+        data: string[];
+        metadata: Record<string, any>;
+      }
+
+      const result = await operation({ id: 1, data: ['a', 'b'], metadata: { key: 'value' } }, 'test')
+        .step((value: ComplexData) => ok({ ...value, id: value.id + 1 }))
+        .context((ctx: string, value: ComplexData) => ok(`${ctx}-${value.id}`))
+        .step((value: ComplexData) => ok(value.data.length))
+        .complete();
+
+      expect(result.err).toBeUndefined();
+      expect(result.res).toBe(2);
+    });
+
+    test('operation with null and undefined values', async () => {
+      const result = await operation(null, undefined)
+        .step((value: null) => ok('processed'))
+        .context((ctx: undefined, value: string) => ok('context'))
+        .complete();
+
+      expect(result.err).toBeUndefined();
+      expect(result.res).toBe('processed');
+    });
+
+    test('operation with empty arrays and objects', async () => {
+      const result = await operation([], {})
+        .step((value: any[]) => ok(value.length))
+        .context((ctx: any, value: number) => ok({ ...ctx, count: value }))
+        .step((value: number) => ok(value === 0))
+        .complete();
+
+      expect(result.err).toBeUndefined();
+      expect(result.res).toBe(true);
     });
   });
 
