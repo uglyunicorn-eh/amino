@@ -101,7 +101,7 @@ class OperationImpl<V, C, E = Error> implements Operation<V, C, E> {
     return new OperationImpl<NV, C, E>({
       steps: newSteps,
       errorTransformer: this.state.errorTransformer,
-      initialValue: this.state.initialValue, // Preserve the initial value
+      initialValue: this.state.initialValue as NV | undefined, // Type assertion for initial value
       initialContext: this.state.initialContext,
     });
   }
@@ -112,7 +112,7 @@ class OperationImpl<V, C, E = Error> implements Operation<V, C, E> {
       steps: newSteps,
       errorTransformer: this.state.errorTransformer,
       initialValue: this.state.initialValue,
-      initialContext: this.state.initialContext, // Preserve the initial context
+      initialContext: this.state.initialContext as NC | undefined, // Type assertion for initial context
     });
   }
 
