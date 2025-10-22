@@ -1,20 +1,12 @@
 import { type Result, type AsyncResult, ok, err } from './result.ts';
 
 /**
- * Step function signature - transforms value while preserving context
- * @param value - Current value
- * @param context - Current context
- * @returns Result or AsyncResult with new value
- */
-export type StepFunction<V, NV, C> = (value: V, context: C) => Result<NV> | AsyncResult<NV>;
-
-/**
- * Context function signature - transforms context while preserving value
+ * Unified pipeline function signature - transforms both context and value
  * @param context - Current context
  * @param value - Current value
- * @returns Result or AsyncResult with new context
+ * @returns Result or AsyncResult with new context and new value
  */
-export type ContextFunction<V, C, NC> = (context: C, value: V) => Result<NC> | AsyncResult<NC>;
+export type PipelineFunction<V, NV, C, NC> = (context: C, value: V) => Result<{ context: NC; value: NV }> | AsyncResult<{ context: NC; value: NV }>;
 
 /**
  * Error transformer signature - transforms errors
@@ -24,25 +16,11 @@ export type ContextFunction<V, C, NC> = (context: C, value: V) => Result<NC> | A
 type ErrorTransformer<E> = (originalError: Error) => E;
 
 /**
- * Internal step representation for the pipeline
+ * Internal pipeline step representation
  */
-type PipelineStep<V, NV, C> = {
-  type: 'step';
-  fn: StepFunction<V, NV, C>;
+type PipelineStep<V, NV, C, NC> = {
+  fn: PipelineFunction<V, NV, C, NC>;
 };
-
-/**
- * Internal context step representation for the pipeline
- */
-type PipelineContextStep<V, C, NC> = {
-  type: 'context';
-  fn: ContextFunction<V, C, NC>;
-};
-
-/**
- * Union type for all pipeline steps
- */
-type AnyPipelineStep = PipelineStep<any, any, any> | PipelineContextStep<any, any, any>;
 
 /**
  * Operation interface - chainable pipeline builder
@@ -56,14 +34,14 @@ export interface Operation<V, C, E = Error> {
    * @param fn - Step function that transforms the value
    * @returns New operation with updated value type
    */
-  step<NV>(fn: StepFunction<V, NV, C>): Operation<NV, C, E>;
+  step<NV>(fn: (value: V, context: C) => Result<NV> | AsyncResult<NV>): Operation<NV, C, E>;
 
   /**
    * Add a context transformation step to the pipeline
    * @param fn - Context function that transforms the context
    * @returns New operation with updated context type
    */
-  context<NC>(fn: ContextFunction<V, C, NC>): Operation<V, NC, E>;
+  context<NC>(fn: (context: C, value: V) => Result<NC> | AsyncResult<NC>): Operation<V, NC, E>;
 
   /**
    * Set error transformation for the operation
@@ -84,7 +62,7 @@ export interface Operation<V, C, E = Error> {
  * Internal operation state
  */
 type OperationState<V, C, E = Error> = {
-  steps: AnyPipelineStep[];
+  steps: PipelineStep<any, any, any, any>[];
   errorTransformer?: ErrorTransformer<E>;
   initialValue?: V;
   initialContext?: C;
@@ -96,23 +74,41 @@ type OperationState<V, C, E = Error> = {
 class OperationImpl<V, C, E = Error> implements Operation<V, C, E> {
   constructor(private state: OperationState<V, C, E>) {}
 
-  step<NV>(fn: StepFunction<V, NV, C>): Operation<NV, C, E> {
-    const newSteps = [...this.state.steps, { type: 'step' as const, fn } as PipelineStep<V, NV, C>];
+  step<NV>(fn: (value: V, context: C) => Result<NV> | AsyncResult<NV>): Operation<NV, C, E> {
+    // Convert step function to unified pipeline function
+    const pipelineFn: PipelineFunction<V, NV, C, C> = async (context: C, value: V) => {
+      const result = await fn(value, context);
+      if (result.err !== undefined) {
+        return err(result.err);
+      }
+      return ok({ context, value: result.res });
+    };
+
+    const newSteps = [...this.state.steps, { fn: pipelineFn }];
     return new OperationImpl<NV, C, E>({
       steps: newSteps,
       errorTransformer: this.state.errorTransformer,
-      initialValue: this.state.initialValue as NV | undefined, // Type assertion for initial value
+      initialValue: this.state.initialValue as NV | undefined,
       initialContext: this.state.initialContext,
     });
   }
 
-  context<NC>(fn: ContextFunction<V, C, NC>): Operation<V, NC, E> {
-    const newSteps = [...this.state.steps, { type: 'context' as const, fn } as PipelineContextStep<V, C, NC>];
+  context<NC>(fn: (context: C, value: V) => Result<NC> | AsyncResult<NC>): Operation<V, NC, E> {
+    // Convert context function to unified pipeline function
+    const pipelineFn: PipelineFunction<V, V, C, NC> = async (context: C, value: V) => {
+      const result = await fn(context, value);
+      if (result.err !== undefined) {
+        return err(result.err);
+      }
+      return ok({ context: result.res, value });
+    };
+
+    const newSteps = [...this.state.steps, { fn: pipelineFn }];
     return new OperationImpl<V, NC, E>({
       steps: newSteps,
       errorTransformer: this.state.errorTransformer,
       initialValue: this.state.initialValue,
-      initialContext: this.state.initialContext as NC | undefined, // Type assertion for initial context
+      initialContext: this.state.initialContext as NC | undefined,
     });
   }
 
@@ -153,35 +149,21 @@ class OperationImpl<V, C, E = Error> implements Operation<V, C, E> {
       let currentValue: any = this.state.initialValue;
       let currentContext: any = this.state.initialContext;
 
-      // Execute each step in sequence
+      // Execute each step in sequence - no if statements needed!
       for (const step of this.state.steps) {
-        if (step.type === 'step') {
-          // Execute step function
-          const result = await step.fn(currentValue, currentContext);
-          
-          if (result.err !== undefined) {
-            // Step failed - apply error transformation if configured
-            const error = this.state.errorTransformer 
-              ? this.state.errorTransformer(result.err)
-              : result.err;
-            return err(error) as Result<V, E>;
-          }
-          
-          currentValue = result.res;
-        } else if (step.type === 'context') {
-          // Execute context function
-          const result = await step.fn(currentContext, currentValue);
-          
-          if (result.err !== undefined) {
-            // Context update failed - apply error transformation if configured
-            const error = this.state.errorTransformer 
-              ? this.state.errorTransformer(result.err)
-              : result.err;
-            return err(error) as Result<V, E>;
-          }
-          
-          currentContext = result.res;
+        const result = await step.fn(currentContext, currentValue);
+        
+        if (result.err !== undefined) {
+          // Step failed - apply error transformation if configured
+          const error = this.state.errorTransformer 
+            ? this.state.errorTransformer(result.err)
+            : result.err;
+          return err(error) as Result<V, E>;
         }
+        
+        // Update both context and value from unified result
+        currentContext = result.res.context;
+        currentValue = result.res.value;
       }
 
       // All steps completed successfully
