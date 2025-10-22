@@ -6,6 +6,7 @@ A lightweight, type-safe Result pattern implementation for TypeScript with opera
 
 ```bash
 bun add @uglyunicorn/amino
+# or
 npm install @uglyunicorn/amino
 ```
 
