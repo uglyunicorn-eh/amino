@@ -130,7 +130,7 @@ describe('Operation Pipeline', () => {
     
     expect(result.res).toBeUndefined();
     expect(result.err).toBeInstanceOf(Error);
-    expect(result.err.message).toBe('Step failed');
+    expect(result.err?.message).toBe('Step failed');
   });
 
   test('pipeline execution with error transformation', async () => {
@@ -148,9 +148,9 @@ describe('Operation Pipeline', () => {
     
     expect(result.res).toBeUndefined();
     expect(result.err).toBeInstanceOf(CustomError);
-    expect(result.err.message).toBe('Operation failed');
-    expect(result.err.cause).toBeInstanceOf(Error);
-    expect(result.err.cause.message).toBe('Step failed');
+    expect(result.err?.message).toBe('Operation failed');
+    expect(result.err?.cause).toBeInstanceOf(Error);
+    expect((result.err?.cause as Error)?.message).toBe('Step failed');
   });
 
   test('step method preserves types', () => {
@@ -412,7 +412,7 @@ describe('Operation Pipeline', () => {
 
       expect(result.res).toBeUndefined();
       expect(result.err).toBeInstanceOf(Error);
-      expect(result.err.message).toBe('Unexpected step error');
+      expect(result.err?.message).toBe('Unexpected step error');
     });
 
     test('unexpected error during context execution', async () => {
@@ -426,7 +426,7 @@ describe('Operation Pipeline', () => {
 
       expect(result.res).toBeUndefined();
       expect(result.err).toBeInstanceOf(Error);
-      expect(result.err.message).toBe('Unexpected context error');
+      expect(result.err?.message).toBe('Unexpected context error');
     });
 
     test('unexpected non-Error during execution', async () => {
@@ -440,7 +440,7 @@ describe('Operation Pipeline', () => {
 
       expect(result.res).toBeUndefined();
       expect(result.err).toBeInstanceOf(Error);
-      expect(result.err.message).toBe('String error');
+      expect(result.err?.message).toBe('String error');
     });
 
     test('unexpected error with error transformation', async () => {
@@ -460,9 +460,9 @@ describe('Operation Pipeline', () => {
 
       expect(result.res).toBeUndefined();
       expect(result.err).toBeInstanceOf(CustomError);
-      expect(result.err.message).toBe('Operation failed');
-      expect(result.err.cause).toBeInstanceOf(Error);
-      expect(result.err.cause.message).toBe('Step failed');
+      expect(result.err?.message).toBe('Operation failed');
+      expect(result.err?.cause).toBeInstanceOf(Error);
+      expect((result.err?.cause as Error)?.message).toBe('Step failed');
     });
 
     test('operation with complex data types', async () => {
@@ -547,9 +547,9 @@ describe('Operation Pipeline', () => {
 
       expect(result.res).toBeUndefined();
       expect(result.err).toBeInstanceOf(CustomError);
-      expect(result.err.message).toBe('Custom operation failed');
-      expect(result.err.cause).toBeInstanceOf(Error);
-      expect(result.err.cause.message).toBe('Step failed');
+      expect(result.err?.message).toBe('Custom operation failed');
+      expect(result.err?.cause).toBeInstanceOf(Error);
+      expect((result.err?.cause as Error)?.message).toBe('Step failed');
     });
 
     test('error transformation with generic error execution', async () => {
@@ -561,9 +561,9 @@ describe('Operation Pipeline', () => {
 
       expect(result.res).toBeUndefined();
       expect(result.err).toBeInstanceOf(Error);
-      expect(result.err.message).toBe('Generic operation failed');
-      expect(result.err.cause).toBeInstanceOf(Error);
-      expect(result.err.cause.message).toBe('Step failed');
+      expect(result.err?.message).toBe('Generic operation failed');
+      expect(result.err?.cause).toBeInstanceOf(Error);
+      expect((result.err?.cause as Error)?.message).toBe('Step failed');
     });
   });
 
