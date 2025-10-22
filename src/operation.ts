@@ -44,12 +44,19 @@ export interface Operation<V, C, E = Error> {
   context<NC>(fn: (context: C, value: V) => NC): Operation<V, NC, E>;
 
   /**
-   * Set error transformation for the operation
-   * @param errorClassOrMessage - Error class constructor or message string
-   * @param message - Error message (required when errorClassOrMessage is a constructor)
+   * Set error transformation for the operation with custom error class
+   * @param errorClass - Error class constructor
+   * @param message - Error message
    * @returns New operation with updated error type
    */
-  failsWith<NE>(errorClassOrMessage: new (message: string, cause?: Error) => NE | string, message?: string): Operation<V, C, NE> | Operation<V, C, Error>;
+  failsWith<NE>(errorClass: new (message: string, cause?: Error) => NE, message: string): Operation<V, C, NE>;
+
+  /**
+   * Set error transformation for the operation with generic error
+   * @param message - Error message string
+   * @returns New operation with updated error type
+   */
+  failsWith(message: string): Operation<V, C, Error>;
 
   /**
    * Execute the pipeline and return the final result
@@ -108,7 +115,9 @@ class OperationImpl<V, C, E = Error> implements Operation<V, C, E> {
     });
   }
 
-  failsWith<NE>(errorClassOrMessage: new (message: string, cause?: Error) => NE | string, message?: string): Operation<V, C, NE> | Operation<V, C, Error> {
+  failsWith<NE>(errorClass: new (message: string, cause?: Error) => NE, message: string): Operation<V, C, NE>;
+  failsWith(message: string): Operation<V, C, Error>;
+  failsWith<NE>(errorClassOrMessage: any, message?: string): Operation<V, C, NE> | Operation<V, C, Error> {
     const { steps, initialValue, initialContext } = this.state;
     
     if (typeof errorClassOrMessage === 'string') {
