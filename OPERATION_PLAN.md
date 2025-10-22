@@ -25,14 +25,14 @@ Context → Context → Context → Context
 
 ```typescript
 // Basic usage
-const result = await operation(input, initialContext)
+const result = await operation(initialContext, input)
   .step((value, ctx) => processValue(value))
   .context((ctx, value) => updateContext(ctx, value))
   .step((value, ctx) => anotherProcess(value))
   .complete();
 
 // With mixed sync/async steps
-const result = await operation(input, context)
+const result = await operation(context, input)
   .step((value, ctx) => validateInput(value))     // Sync
   .step(async (value, ctx) => fetchData(value))    // Async
   .step((value, ctx) => transformData(value))      // Sync
@@ -51,7 +51,7 @@ const result = await operation(input, context)
 - Internal step representation as linked list
 
 #### Step 2: Implement Entry Point
-- `operation<V, C>(value: V, context: C)` - Creates initial operation
+- `operation<C, V>(context: C, value: V)` - Creates initial operation (context first)
 - Basic operation builder with initial state
 
 ### Phase 2: Pipeline Methods
@@ -126,6 +126,20 @@ interface Operation<V, C> {
 **Build incrementally:** Each method separately (Steps 3-5)  
 **Test thoroughly:** After each phase
 **Document as we go:** Keep examples updated
+
+## Benefits of Context-First Design
+
+✅ **More composable** - Create context-specific operations:
+```typescript
+const processUser = operation(userContext);
+const result = await processUser(userData)
+  .step((user, ctx) => validateUser(user))
+  .complete();
+```
+
+✅ **Consistent with context functions** - `context(ctx, value)`  
+✅ **Functional style** - Context as "environment"  
+✅ **Better partial application** - `const withContext = operation(ctx)`  
 
 ## Questions for Refinement
 
