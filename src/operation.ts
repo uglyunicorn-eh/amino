@@ -80,10 +80,7 @@ class OperationImpl<V, C, E = Error> implements Operation<V, C, E> {
     // Convert step function to unified pipeline function
     const pipelineFn: PipelineFunction<V, NV, C, C> = async (context: C, value: V) => {
       const { err: error, res } = await fn(value, context);
-      if (error !== undefined) {
-        return err(error);
-      }
-      return ok({ context, value: res });
+      return error !== undefined ? err(error) : ok({ context, value: res });
     };
 
     const newSteps = [...steps, { fn: pipelineFn }];
@@ -99,10 +96,8 @@ class OperationImpl<V, C, E = Error> implements Operation<V, C, E> {
     const { steps, errorTransformer, initialValue, initialContext } = this.state;
     
     // Convert plain context function to unified pipeline function
-    const pipelineFn: PipelineFunction<V, V, C, NC> = async (context: C, value: V) => {
-      const newContext = fn(context, value);
-      return ok({ context: newContext, value });
-    };
+    const pipelineFn: PipelineFunction<V, V, C, NC> = async (context: C, value: V) => 
+      ok({ context: fn(context, value), value });
 
     const newSteps = [...steps, { fn: pipelineFn }];
     return new OperationImpl<V, NC, E>({
@@ -117,10 +112,8 @@ class OperationImpl<V, C, E = Error> implements Operation<V, C, E> {
     const { steps, initialValue, initialContext } = this.state;
     
     if (typeof errorClassOrMessage === 'string') {
-      // Generic error with message
-      const errorTransformer: ErrorTransformer<Error> = (originalError: Error) => {
-        return new Error(errorClassOrMessage, { cause: originalError });
-      };
+      const errorTransformer: ErrorTransformer<Error> = (originalError: Error) => 
+        new Error(errorClassOrMessage, { cause: originalError });
       
       return new OperationImpl<V, C, Error>({
         steps,
@@ -129,10 +122,8 @@ class OperationImpl<V, C, E = Error> implements Operation<V, C, E> {
         initialContext,
       });
     } else {
-      // Custom error class with message
-      const errorTransformer: ErrorTransformer<NE> = (originalError: Error): NE => {
-        return new (errorClassOrMessage as new (message: string, cause?: Error) => NE)(message!, originalError);
-      };
+      const errorTransformer: ErrorTransformer<NE> = (originalError: Error): NE => 
+        new (errorClassOrMessage as new (message: string, cause?: Error) => NE)(message!, originalError);
       
       return new OperationImpl<V, C, NE>({
         steps,
@@ -160,8 +151,7 @@ class OperationImpl<V, C, E = Error> implements Operation<V, C, E> {
         
         if (error !== undefined) {
           // Step failed - apply error transformation if configured
-          const transformedError = errorTransformer ? errorTransformer(error) : error;
-          return err(transformedError) as Result<V, E>;
+          return err(errorTransformer ? errorTransformer(error) : error) as Result<V, E>;
         }
         
         // Update both context and value from unified result
