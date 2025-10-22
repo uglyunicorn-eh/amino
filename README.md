@@ -1,6 +1,6 @@
 # Amino
 
-A lightweight, type-safe Result pattern implementation for TypeScript with operation pipelines.
+A lightweight, type-safe Result pattern implementation for TypeScript. The fundamental blocks that transform chaotic code into reliable systems.
 
 ## Installation
 
