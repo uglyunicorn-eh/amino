@@ -1,0 +1,53 @@
+{
+  "name": "@uglyunicorn/amino",
+  "version": "0.0.1",
+  "description": "A lightweight, type-safe Result pattern implementation for TypeScript",
+  "keywords": [
+    "result",
+    "either",
+    "error-handling",
+    "typescript",
+    "functional",
+    "type-safe"
+  ],
+  "license": "MIT",
+  "author": "Ugly Unicorn",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/uglyunicorn-eh/amino.git"
+  },
+  "bugs": {
+    "url": "https://github.com/uglyunicorn-eh/amino/issues"
+  },
+  "homepage": "https://github.com/uglyunicorn-eh/amino#readme",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "bun build src/index.ts --outdir dist --target node && bun run build:types",
+    "build:types": "tsc --project tsconfig.build.json",
+    "test": "bun test",
+    "test:coverage": "bun test --coverage",
+    "prepublishOnly": "bun run test && bun run build"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  }
+}

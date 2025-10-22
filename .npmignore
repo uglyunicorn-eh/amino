@@ -1,0 +1,12 @@
+src/
+tests/
+tsconfig.json
+tsconfig.build.json
+bun.lock
+.cursor/
+.gitignore
+*.test.ts
+*.spec.ts
+coverage/
+.DS_Store
+
