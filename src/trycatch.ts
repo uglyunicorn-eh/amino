@@ -23,12 +23,12 @@ export function trycatch<T>(fn: () => T): Result<T> | AsyncResult<any> {
     if (result instanceof Promise) {
       return result
         .then(value => ok(value))
-               .catch(error => {
-                 if (error instanceof Error) {
-                   return err(error);
-                 }
-                 return err(new Error(String(error)));
-               }) as AsyncResult<T>;
+        .catch(error => {
+          if (error instanceof Error) {
+            return err(error);
+          }
+          return err(new Error(String(error)));
+        }) as AsyncResult<T>;
     }
     
     return ok(result as T);
