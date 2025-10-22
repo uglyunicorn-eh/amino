@@ -1,74 +1,61 @@
 # Amino
 
-A lightweight, type-safe Result pattern implementation for TypeScript with powerful operation pipelines.
+A lightweight, type-safe Result pattern implementation for TypeScript with operation pipelines.
 
 ## Installation
 
 ```bash
 bun add @uglyunicorn/amino
-# or
 npm install @uglyunicorn/amino
 ```
 
-## Usage
+## Core Concepts
 
-### Basic Result Pattern
+### Result Pattern
+
+Handle success and errors without exceptions:
 
 ```typescript
 import { ok, err, type Result } from '@uglyunicorn/amino';
 
 function divide(a: number, b: number): Result<number> {
-  if (b === 0) {
-    return err('Division by zero');
-  }
+  if (b === 0) return err('Division by zero');
   return ok(a / b);
 }
 
 const { res, err: error } = divide(10, 2);
 if (error === undefined) {
-  console.log(`Result: ${res}`); // Result: 5
-} else {
-  console.error(`Error: ${error.message}`);
+  console.log(res); // 5
 }
 ```
 
 ### Try-Catch Wrapper
 
-The `trycatch` function wraps any function in a try-catch and returns a Result. It works with both synchronous and asynchronous functions:
+Wrap any function in a Result:
 
 ```typescript
 import { trycatch } from '@uglyunicorn/amino';
 
-// Synchronous
+// Sync
 const { res, err } = trycatch(() => JSON.parse('{"name":"John"}'));
-if (err === undefined) {
-  console.log(res.name); // John
-}
 
-// Asynchronous
-const { res: data, err: error } = await trycatch(async () => {
+// Async
+const { res, err } = await trycatch(async () => {
   const response = await fetch('https://api.example.com/data');
   return response.json();
 });
-
-if (error === undefined) {
-  console.log(data); // API data
-} else {
-  console.error('Failed to fetch:', error.message);
-}
 ```
 
-### Operation Pipeline
+## Operation Pipeline
 
-The operation pipeline provides a powerful, chainable way to process data with built-in error handling and context management.
+Chain operations with fail-fast error handling and context management.
 
-#### Basic Pipeline
+### Basic Usage
 
 ```typescript
-import { operation } from '@uglyunicorn/amino';
+import { operation, ok, err } from '@uglyunicorn/amino';
 
-// Simple value transformation
-const result = await operation(10, 'initial-context')
+const result = await operation(10, 'context')
   .step((value: number) => ok(value * 2))
   .step((value: number) => ok(value + 1))
   .complete();
@@ -78,37 +65,31 @@ if (result.err === undefined) {
 }
 ```
 
-#### Context Management
+### Key Features
+
+#### 1. Fail-Fast Error Handling
 
 ```typescript
-// Context updates while preserving value - clean and simple!
+const result = await operation(10)
+  .step((value: number) => ok(value * 2))
+  .step((value: number) => err('Failed!'))
+  .step((value: number) => ok(value + 1)) // Skipped
+  .complete();
+
+// result.err.message === 'Failed!'
+```
+
+#### 2. Context Management
+
+```typescript
 const result = await operation(5, 'initial')
   .step((value: number) => ok(value * 2))
   .context((ctx: string, value: number) => `${ctx}-processed`)
   .step((value: number) => ok(value + 1))
   .complete();
-
-if (result.err === undefined) {
-  console.log(result.res); // 11
-}
 ```
 
-#### Error Handling
-
-```typescript
-// Fail-fast error handling
-const result = await operation(10, 'test')
-  .step((value: number) => ok(value * 2))
-  .step((value: number) => err('Something went wrong'))
-  .step((value: number) => ok(value + 1)) // This won't execute
-  .complete();
-
-if (result.err !== undefined) {
-  console.log(result.err.message); // "Something went wrong"
-}
-```
-
-#### Custom Error Types
+#### 3. Custom Error Types
 
 ```typescript
 class ValidationError extends Error {
@@ -117,99 +98,53 @@ class ValidationError extends Error {
   }
 }
 
-const result = await operation(10, 'test')
+const result = await operation(10)
   .failsWith(ValidationError, 'Validation failed')
   .step((value: number) => err('Invalid input'))
   .complete();
 
-if (result.err !== undefined) {
-  console.log(result.err instanceof ValidationError); // true
-  console.log(result.err.message); // "Validation failed"
-  console.log(result.err.cause?.message); // "Invalid input"
-}
+// result.err is ValidationError with cause chain
 ```
 
-#### Optional Arguments
+#### 4. Async Operations
 
 ```typescript
-// Create operation without initial values
-const op1 = operation();
-
-// With only initial value
-const op2 = operation(42);
-
-// With both value and context
-const op3 = operation(42, 'initial-context');
+const result = await operation(3)
+  .step((value: number) => ok(value * 2))        // sync
+  .step(async (value: number) => ok(value + 1))  // async
+  .step((value: number) => ok(value * 2))        // sync
+  .complete();
 ```
 
-#### Async Operations
+#### 5. Type Safety
+
+TypeScript infers types throughout the chain:
 
 ```typescript
-// Mix sync and async operations
-const result = await operation(3, 'test')
-  .step((value: number) => ok(value * 2)) // sync
-  .step(async (value: number) => ok(value + 1)) // async
-  .step((value: number) => ok(value * 2)) // sync
+const result = await operation(42)
+  .step((value: number) => ok(value.toString()))  // number -> string
+  .step((value: string) => ok(value.length))      // string -> number
+  .step((value: number) => ok(value > 0))         // number -> boolean
   .complete();
 
-if (result.err === undefined) {
-  console.log(result.res); // 14
-}
-```
-
-#### Complex Data Processing
-
-```typescript
-interface User {
-  id: number;
-  name: string;
-  email: string;
-}
-
-interface UserProfile {
-  id: number;
-  displayName: string;
-  email: string;
-}
-
-const result = await operation('john@example.com', { apiUrl: 'https://api.example.com' })
-  .step(async (email: string) => {
-    // Simulate API call
-    const user: User = { id: 1, name: 'John Doe', email };
-    return ok(user);
-  })
-  .context((ctx: { apiUrl: string }, user: User) => {
-    return { ...ctx, userId: user.id };
-  })
-  .step((user: User) => {
-    const profile: UserProfile = {
-      id: user.id,
-      displayName: user.name,
-      email: user.email
-    };
-    return ok(profile);
-  })
-  .complete();
-
-if (result.err === undefined) {
-  console.log(result.res); // UserProfile object
-}
-```
-
-#### Type Safety
-
-The operation pipeline is fully type-safe, with TypeScript inferring types throughout the chain:
-
-```typescript
-const op = operation(42, 'test')
-  .step((value: number) => ok(value.toString())) // number -> string
-  .step((value: string) => ok(value.length)) // string -> number
-  .step((value: number) => ok(value > 0)); // number -> boolean
-
-// TypeScript knows the final value type is boolean
-const result = await op.complete();
 // result.res is typed as boolean
 ```
+
+## API
+
+### Result Functions
+
+- `ok<T>(value: T): Success<T>` - Create success result
+- `err(error: Error | string): Fail<Error>` - Create error result
+- `trycatch<T>(fn: () => T): Result<T>` - Wrap function in Result
+
+### Operation
+
+- `operation<V, C>(value?: V, context?: C)` - Create operation pipeline
+- `.step<NV>(fn: (value: V, context: C) => Result<NV>)` - Add processing step
+- `.context<NC>(fn: (context: C, value: V) => NC)` - Transform context
+- `.failsWith<E>(ErrorClass, message)` - Set custom error type
+- `.complete()` - Execute pipeline and return Result
 
 ## License
 
