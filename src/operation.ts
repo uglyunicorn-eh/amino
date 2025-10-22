@@ -26,9 +26,9 @@ type PipelineStep<V, NV, C, NC> = {
  * Operation interface - chainable pipeline builder
  * @param V - Value type
  * @param C - Context type  
- * @param E - Error type
+ * @param E - Error type (must extend Error)
  */
-export interface Operation<V, C, E = Error> {
+export interface Operation<V, C, E extends Error = Error> {
   /**
    * Add a processing step to the pipeline
    * @param fn - Step function that transforms the value
@@ -49,7 +49,7 @@ export interface Operation<V, C, E = Error> {
    * @param message - Error message
    * @returns New operation with updated error type
    */
-  failsWith<NE>(errorClass: new (message: string, cause?: Error) => NE, message: string): Operation<V, C, NE>;
+  failsWith<NE extends Error>(errorClass: new (message: string, cause?: Error) => NE, message: string): Operation<V, C, NE>;
 
   /**
    * Set error transformation for the operation with generic error
@@ -68,7 +68,7 @@ export interface Operation<V, C, E = Error> {
 /**
  * Internal operation state
  */
-type OperationState<V, C, E = Error> = {
+type OperationState<V, C, E extends Error = Error> = {
   steps: PipelineStep<any, any, any, any>[];
   errorTransformer?: ErrorTransformer<E>;
   initialValue?: V;
@@ -78,7 +78,7 @@ type OperationState<V, C, E = Error> = {
 /**
  * Internal operation implementation class
  */
-class OperationImpl<V, C, E = Error> implements Operation<V, C, E> {
+class OperationImpl<V, C, E extends Error = Error> implements Operation<V, C, E> {
   constructor(private state: OperationState<V, C, E>) {}
 
   step<NV>(fn: (value: V, context: C) => Result<NV> | AsyncResult<NV>): Operation<NV, C, E> {
@@ -115,9 +115,9 @@ class OperationImpl<V, C, E = Error> implements Operation<V, C, E> {
     });
   }
 
-  failsWith<NE>(errorClass: new (message: string, cause?: Error) => NE, message: string): Operation<V, C, NE>;
+  failsWith<NE extends Error>(errorClass: new (message: string, cause?: Error) => NE, message: string): Operation<V, C, NE>;
   failsWith(message: string): Operation<V, C, Error>;
-  failsWith<NE>(errorClassOrMessage: any, message?: string): Operation<V, C, NE> | Operation<V, C, Error> {
+  failsWith<NE extends Error>(errorClassOrMessage: any, message?: string): Operation<V, C, NE> | Operation<V, C, Error> {
     const { steps, initialValue, initialContext } = this.state;
     
     if (typeof errorClassOrMessage === 'string') {
