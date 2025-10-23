@@ -228,28 +228,39 @@ class OperationImpl<V, C, E extends Error = Error, R = AsyncResult<V, E>> implem
     return this.executePipeline().then(({ result }) => result) as R extends AsyncResult<V, E> ? AsyncResult<V, E> : Promise<R>;
   }
 
+  /**
+   * Executes a single pipeline step and returns the result
+   */
+  private async executeStep(currentStep: PipelineStep<any, any, any, any>, currentContext: any, currentValue: any): Promise<{ newContext: any; newValue: any; error?: any }> {
+    const [newContext, result] = await currentStep.fn(currentContext, currentValue);
+    const { err: error, res } = result;
+    
+    if (error !== undefined) {
+      return { newContext: currentContext, newValue: currentValue, error };
+    }
+    
+    return { newContext, newValue: res };
+  }
+
   private async executePipeline(): Promise<{ result: Result<V, E>; context: C }> {
     try {
       let currentValue: any = this.initialValue;
       let currentContext: any = this.initialContext;
 
-      // Execute each step in sequence, checking for errors at each step.
+      // Execute each step in sequence
       let currentStep = this.head;
       while (currentStep) {
-        const [newContext, result] = await currentStep.fn(currentContext, currentValue);
-        const { err: error, res } = result;
+        const { newContext, newValue, error } = await this.executeStep(currentStep, currentContext, currentValue);
         
         if (error !== undefined) {
-          // Step failed - apply error factory if configured
           return {
             result: this.failure(error),
             context: currentContext as C
           };
         }
         
-        // Update both context and value from tuple
         currentContext = newContext;
-        currentValue = res;
+        currentValue = newValue;
         currentStep = currentStep.next;
       }
 
