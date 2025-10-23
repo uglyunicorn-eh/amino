@@ -26,8 +26,8 @@ alwaysApply: true
 ## Checkpoint Workflow
 1. **Create checkpoint branch** from current working state
 2. **Commit current changes** with descriptive message
-3. **Push checkpoint branch** to remote for backup
-4. **Continue development** from checkpoint or switch back as needed
+3. **Continue development** from checkpoint or switch back as needed
+4. **Push when ready** - Only push to remote when explicitly requested
 
 ## Example Checkpoint Commands
 ```bash
@@ -35,13 +35,14 @@ alwaysApply: true
 git checkout -b checkpoint/feature-complete
 git add .
 git commit -m "checkpoint: Feature implementation complete with full test coverage"
-git push origin checkpoint/feature-complete
 
 # Create checkpoint for passing tests
 git checkout -b checkpoint/tests-passing
 git add .
 git commit -m "checkpoint: All tests passing, ready for refactoring"
-git push origin checkpoint/tests-passing
+
+# Push only when explicitly requested
+git push origin checkpoint/feature-complete
 ```
 
 ## Checkpoint Best Practices
