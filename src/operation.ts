@@ -142,65 +142,59 @@ type OperationState<V, C, E extends Error = Error, R = AsyncResult<V, E>> = {
 };
 
 /**
- * Internal operation implementation class
+ * Internal operation implementation class with mutable state for lazy evaluation
  */
 class OperationImpl<V, C, E extends Error = Error, R = AsyncResult<V, E>> implements Operation<V, C, E, R> {
-  constructor(private state: OperationState<V, C, E, R>) {}
+  private steps: PipelineStep<any, any, any, any>[] = [];
+  private errorTransformer?: ErrorTransformer<E>;
+  private initialValue?: V;
+  private initialContext?: C;
+  private completeHandler?: CompletionHandler<V, C, E, R>;
+
+  constructor(state?: OperationState<V, C, E, R>) {
+    if (state) {
+      this.steps = [...state.steps];
+      this.errorTransformer = state.errorTransformer;
+      this.initialValue = state.initialValue;
+      this.initialContext = state.initialContext;
+      this.completeHandler = state.completeHandler;
+    }
+  }
 
   step<NV>(fn: StepFunction<V, C, NV>): Operation<NV, C, E, R> {
     const pipelineFn: PipelineFunction<V, NV, C, C> = async (context: C, value: V) => 
       [context, await awaitResult(fn(value, context))];
     
-    return new OperationImpl<NV, C, E, R>({
-      ...this.state,
-      steps: [...this.state.steps, { fn: pipelineFn }],
-      initialValue: this.state.initialValue as NV | undefined,
-      completeHandler: this.state.completeHandler as any,
-    });
+    this.steps.push({ fn: pipelineFn });
+    return this as unknown as Operation<NV, C, E, R>;
   }
 
   context<NC>(fn: ContextFunction<C, V, NC>): Operation<V, NC, E, R> {
     const pipelineFn: PipelineFunction<V, V, C, NC> = async (context: C, value: V) => 
       [await awaitResult(fn(context, value)), ok(value)];
     
-    return new OperationImpl<V, NC, E, R>({
-      ...this.state,
-      steps: [...this.state.steps, { fn: pipelineFn }],
-      initialContext: this.state.initialContext as NC | undefined,
-      completeHandler: this.state.completeHandler as any,
-    });
+    this.steps.push({ fn: pipelineFn });
+    return this as unknown as Operation<V, NC, E, R>;
   }
 
   failsWith<NE extends Error>(errorClass: ErrorFactory<NE>, message: string): Operation<V, C, NE, R>;
   failsWith(message: string): Operation<V, C, Error, R>;
   failsWith<NE extends Error>(errorClassOrMessage: any, message?: string): Operation<V, C, NE, R> | Operation<V, C, Error, R> {
     if (typeof errorClassOrMessage === 'string') {
-      const errorTransformer: ErrorTransformer<Error> = (originalError: Error) => 
-        new Error(errorClassOrMessage, { cause: originalError });
-      
-      return new OperationImpl<V, C, Error, R>({
-        ...this.state,
-        errorTransformer,
-        completeHandler: this.state.completeHandler as any,
-      });
+      this.errorTransformer = (originalError: Error) => 
+        new Error(errorClassOrMessage, { cause: originalError }) as E;
     } else {
-      const errorTransformer: ErrorTransformer<NE> = (originalError: Error): NE => 
-        new (errorClassOrMessage as ErrorFactory<NE>)(message!, { cause: originalError });
-      
-      return new OperationImpl<V, C, NE, R>({
-        ...this.state,
-        errorTransformer,
-        completeHandler: this.state.completeHandler as any,
-      });
+      this.errorTransformer = (originalError: Error): E => 
+        new (errorClassOrMessage as ErrorFactory<NE>)(message!, { cause: originalError }) as unknown as E;
     }
+    
+    return this as unknown as Operation<V, C, NE, R>;
   }
 
   complete(): R extends AsyncResult<V, E> ? AsyncResult<V, E> : Promise<R> {
-    const { completeHandler } = this.state;
-    
-    if (completeHandler) {
+    if (this.completeHandler) {
       return this.executePipeline().then(({ result, context }) => 
-        completeHandler(result, context as C)
+        this.completeHandler!(result, context as C)
       ) as R extends AsyncResult<V, E> ? AsyncResult<V, E> : Promise<R>;
     }
     
@@ -208,21 +202,19 @@ class OperationImpl<V, C, E extends Error = Error, R = AsyncResult<V, E>> implem
   }
 
   private async executePipeline(): Promise<{ result: Result<V, E>; context: C }> {
-    const { steps, errorTransformer, initialValue, initialContext } = this.state;
-    
     try {
-      let currentValue: any = initialValue;
-      let currentContext: any = initialContext;
+      let currentValue: any = this.initialValue;
+      let currentContext: any = this.initialContext;
 
       // Execute each step in sequence, checking for errors at each step.
-      for (const { fn } of steps) {
+      for (const { fn } of this.steps) {
         const [newContext, result] = await fn(currentContext, currentValue);
         const { err: error, res } = result;
         
         if (error !== undefined) {
           // Step failed - apply error transformation if configured
           return {
-            result: err(errorTransformer ? errorTransformer(error) : error) as Result<V, E>,
+            result: err(this.errorTransformer ? this.errorTransformer(error) : error) as Result<V, E>,
             context: currentContext as C
           };
         }
@@ -239,12 +231,12 @@ class OperationImpl<V, C, E extends Error = Error, R = AsyncResult<V, E>> implem
       };
     } catch (error) {
       // Unexpected error during execution
-      const transformedError = errorTransformer 
-        ? errorTransformer(error instanceof Error ? error : new Error(String(error)))
+      const transformedError = this.errorTransformer 
+        ? this.errorTransformer(error instanceof Error ? error : new Error(String(error)))
         : (error instanceof Error ? error : new Error(String(error)));
       return {
         result: err(transformedError) as Result<V, E>,
-        context: initialContext as C
+        context: this.initialContext as C
       };
     }
   }
