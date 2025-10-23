@@ -489,7 +489,7 @@ describe('Operation Pipeline', () => {
         .complete();
 
       expect(result.err).toBeUndefined();
-      expect(result.res).toBe(2);
+      expect(result.res).toBe(2 as any);
     });
 
     test('operation with null and undefined values', async () => {
@@ -499,7 +499,7 @@ describe('Operation Pipeline', () => {
         .complete();
 
       expect(result.err).toBeUndefined();
-      expect(result.res).toBe('processed');
+      expect(result.res).toBe('processed' as any);
     });
 
     test('operation with empty arrays and objects', async () => {
@@ -510,7 +510,7 @@ describe('Operation Pipeline', () => {
         .complete();
 
       expect(result.err).toBeUndefined();
-      expect(result.res).toBe(true);
+      expect(result.res).toBe(true as any);
     });
 
     test('failsWith with custom error class without message', () => {
