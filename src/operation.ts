@@ -147,34 +147,24 @@ type OperationState<V, C, E extends Error = Error, R = AsyncResult<V, E>> = {
  * Internal operation implementation class with mutable state for lazy evaluation
  */
 class OperationImpl<V, C, E extends Error = Error, R = AsyncResult<V, E>> implements Operation<V, C, E, R> {
-  private head?: PipelineStep<any, any, any, any>;
-  private tail?: PipelineStep<any, any, any, any>;
-  private errorTransformer?: ErrorTransformer<E>;
-  private initialValue?: V;
-  private initialContext?: C;
-  private completeHandler?: CompletionHandler<V, C, E, R>;
+  private state: OperationState<V, C, E, R>;
 
   constructor(state?: OperationState<V, C, E, R>) {
-    if (state) {
-      this.head = state.head;
-      this.tail = state.tail;
-      this.errorTransformer = state.errorTransformer;
-      this.initialValue = state.initialValue;
-      this.initialContext = state.initialContext;
-      this.completeHandler = state.completeHandler;
-    }
+    // Copy the state object to avoid external mutations
+    this.state = { ...state };
   }
 
   /**
    * Appends a new node to the pipeline linked list in O(1) time using tail pointer
    */
   private appendToPipeline<V, NV, C, NC>(step: PipelineStep<V, NV, C, NC>): void {
-    if (this.tail) {
-      this.tail.next = step;
-      this.tail = step;
+    const { tail } = this.state;
+    if (tail) {
+      tail.next = step;
+      this.state.tail = step;
     } else {
-      this.head = step;
-      this.tail = step;
+      this.state.head = step;
+      this.state.tail = step;
     }
   }
 
@@ -200,10 +190,10 @@ class OperationImpl<V, C, E extends Error = Error, R = AsyncResult<V, E>> implem
   failsWith(message: string): Operation<V, C, Error, R>;
   failsWith<NE extends Error>(errorClassOrMessage: any, message?: string): Operation<V, C, NE, R> | Operation<V, C, Error, R> {
     if (typeof errorClassOrMessage === 'string') {
-      this.errorTransformer = (originalError: Error) => 
+      this.state.errorTransformer = (originalError: Error) => 
         new Error(errorClassOrMessage, { cause: originalError }) as E;
     } else {
-      this.errorTransformer = (originalError: Error): E => 
+      this.state.errorTransformer = (originalError: Error): E => 
         new (errorClassOrMessage as ErrorFactory<NE>)(message!, { cause: originalError }) as unknown as E;
     }
     
@@ -214,14 +204,16 @@ class OperationImpl<V, C, E extends Error = Error, R = AsyncResult<V, E>> implem
    * Creates a failure result using the configured error factory
    */
   private failure(error: unknown): Result<V, E> {
+    const { errorTransformer } = this.state;
     const normalizedError = error instanceof Error ? error : new Error(String(error));
-    return err(this.errorTransformer ? this.errorTransformer(normalizedError) : normalizedError) as Result<V, E>;
+    return err(errorTransformer ? errorTransformer(normalizedError) : normalizedError) as Result<V, E>;
   }
 
   complete(): R extends AsyncResult<V, E> ? AsyncResult<V, E> : Promise<R> {
-    if (this.completeHandler) {
+    const { completeHandler } = this.state;
+    if (completeHandler) {
       return this.executePipeline().then(({ result, context }) => 
-        this.completeHandler!(result, context as C)
+        completeHandler(result, context as C)
       ) as R extends AsyncResult<V, E> ? AsyncResult<V, E> : Promise<R>;
     }
     
@@ -243,12 +235,14 @@ class OperationImpl<V, C, E extends Error = Error, R = AsyncResult<V, E>> implem
   }
 
   private async executePipeline(): Promise<{ result: Result<V, E>; context: C }> {
+    const { initialValue, initialContext, head } = this.state;
+    
     try {
-      let currentValue: any = this.initialValue;
-      let currentContext: any = this.initialContext;
+      let currentValue: any = initialValue;
+      let currentContext: any = initialContext;
 
       // Execute each step in sequence
-      let currentStep = this.head;
+      let currentStep = head;
       while (currentStep) {
         const { newContext, newValue, error } = await this.executeStep(currentStep, currentContext, currentValue);
         
@@ -273,7 +267,7 @@ class OperationImpl<V, C, E extends Error = Error, R = AsyncResult<V, E>> implem
       // Unexpected error during execution
       return {
         result: this.failure(error),
-        context: this.initialContext as C
+        context: initialContext as C
       };
     }
   }
