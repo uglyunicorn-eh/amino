@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { operation, makeOperation, typedOperation } from '../src/operation.ts';
+import { operation, makeOperation } from '../src/operation.ts';
 import { ok, err, type Result } from '../src/result.ts';
 
 describe('Operation Pipeline', () => {
@@ -484,7 +484,7 @@ describe('Operation Pipeline', () => {
         metadata: Record<string, any>;
       }
 
-      const result = await typedOperation('test', { id: 1, data: ['a', 'b'], metadata: { key: 'value' } })
+      const result = await operation('test', { id: 1, data: ['a', 'b'], metadata: { key: 'value' } })
         .step((value: ComplexData) => ok({ ...value, id: value.id + 1 }))
         .context((ctx: string, value: ComplexData) => `${ctx}-${value.id}`)
         .step((value: ComplexData) => ok(value.data.length))
@@ -495,7 +495,7 @@ describe('Operation Pipeline', () => {
     });
 
     test('operation with null and undefined values', async () => {
-      const result = await typedOperation(undefined, null)
+      const result = await operation(undefined, null)
         .step((value: null) => ok('processed'))
         .context((ctx: undefined, value: string) => 'context')
         .complete();
@@ -505,7 +505,7 @@ describe('Operation Pipeline', () => {
     });
 
     test('operation with empty arrays and objects', async () => {
-      const result = await typedOperation({}, [])
+      const result = await operation({}, [])
         .step((value: any[]) => ok(value.length))
         .context((ctx: any, value: number) => ({ ...ctx, count: value }))
         .step((value: number) => ok(value === 0))
