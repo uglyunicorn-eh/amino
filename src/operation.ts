@@ -61,10 +61,11 @@ export type PipelineFunction<V, NV, C, NC> = (context: C, value: V) => Promise<[
 type ErrorTransformer<E> = (originalError: Error) => E;
 
 /**
- * Internal pipeline step representation
+ * Internal pipeline step representation as linked list node
  */
 type PipelineStep<V, NV, C, NC> = {
   fn: PipelineFunction<V, NV, C, NC>;
+  next?: PipelineStep<any, any, any, any>;
 };
 
 /**
@@ -134,7 +135,8 @@ export type CompletionHandler<V, C, E extends Error, R> = (result: Result<V, E>,
  * Internal operation state
  */
 type OperationState<V, C, E extends Error = Error, R = AsyncResult<V, E>> = {
-  steps: PipelineStep<any, any, any, any>[];
+  head?: PipelineStep<any, any, any, any>;
+  tail?: PipelineStep<any, any, any, any>;
   errorTransformer?: ErrorTransformer<E>;
   initialValue?: V;
   initialContext?: C;
@@ -145,7 +147,8 @@ type OperationState<V, C, E extends Error = Error, R = AsyncResult<V, E>> = {
  * Internal operation implementation class with mutable state for lazy evaluation
  */
 class OperationImpl<V, C, E extends Error = Error, R = AsyncResult<V, E>> implements Operation<V, C, E, R> {
-  private steps: PipelineStep<any, any, any, any>[] = [];
+  private head?: PipelineStep<any, any, any, any>;
+  private tail?: PipelineStep<any, any, any, any>;
   private errorTransformer?: ErrorTransformer<E>;
   private initialValue?: V;
   private initialContext?: C;
@@ -153,7 +156,8 @@ class OperationImpl<V, C, E extends Error = Error, R = AsyncResult<V, E>> implem
 
   constructor(state?: OperationState<V, C, E, R>) {
     if (state) {
-      this.steps = [...state.steps];
+      this.head = state.head;
+      this.tail = state.tail;
       this.errorTransformer = state.errorTransformer;
       this.initialValue = state.initialValue;
       this.initialContext = state.initialContext;
@@ -161,11 +165,25 @@ class OperationImpl<V, C, E extends Error = Error, R = AsyncResult<V, E>> implem
     }
   }
 
+  /**
+   * Appends a new node to the pipeline linked list in O(1) time using tail pointer
+   */
+  private appendToPipeline<V, NV, C, NC>(step: PipelineStep<V, NV, C, NC>): void {
+    if (this.tail) {
+      this.tail.next = step;
+      this.tail = step;
+    } else {
+      this.head = step;
+      this.tail = step;
+    }
+  }
+
   step<NV>(fn: StepFunction<V, C, NV>): Operation<NV, C, E, R> {
     const pipelineFn: PipelineFunction<V, NV, C, C> = async (context: C, value: V) => 
       [context, await awaitResult(fn(value, context))];
     
-    this.steps.push({ fn: pipelineFn });
+    this.appendToPipeline({ fn: pipelineFn });
+    
     return this as unknown as Operation<NV, C, E, R>;
   }
 
@@ -173,7 +191,8 @@ class OperationImpl<V, C, E extends Error = Error, R = AsyncResult<V, E>> implem
     const pipelineFn: PipelineFunction<V, V, C, NC> = async (context: C, value: V) => 
       [await awaitResult(fn(context, value)), ok(value)];
     
-    this.steps.push({ fn: pipelineFn });
+    this.appendToPipeline({ fn: pipelineFn });
+    
     return this as unknown as Operation<V, NC, E, R>;
   }
 
@@ -215,8 +234,9 @@ class OperationImpl<V, C, E extends Error = Error, R = AsyncResult<V, E>> implem
       let currentContext: any = this.initialContext;
 
       // Execute each step in sequence, checking for errors at each step.
-      for (const { fn } of this.steps) {
-        const [newContext, result] = await fn(currentContext, currentValue);
+      let currentStep = this.head;
+      while (currentStep) {
+        const [newContext, result] = await currentStep.fn(currentContext, currentValue);
         const { err: error, res } = result;
         
         if (error !== undefined) {
@@ -230,6 +250,7 @@ class OperationImpl<V, C, E extends Error = Error, R = AsyncResult<V, E>> implem
         // Update both context and value from tuple
         currentContext = newContext;
         currentValue = res;
+        currentStep = currentStep.next;
       }
 
       // All steps completed successfully
@@ -255,7 +276,6 @@ class OperationImpl<V, C, E extends Error = Error, R = AsyncResult<V, E>> implem
  */
 export function operation<C = unknown, V = unknown>(initialContext?: C, initialValue?: V): TypedOperation<V, C, Error> {
   return new OperationImpl<V, C, Error>({
-    steps: [],
     initialValue,
     initialContext,
   }) as TypedOperation<V, C, Error>;
@@ -271,7 +291,6 @@ export function makeOperation<C = unknown, E extends Error = Error, R = any>(
 ): <V = unknown>(initialContext?: C, initialValue?: V) => Operation<V, C, E, Promise<R>> {
   return <V = unknown>(initialContext?: C, initialValue?: V) => {
     return new OperationImpl<V, C, E, Promise<R>>({
-      steps: [],
       initialValue,
       initialContext,
       completeHandler: async (result: Result<V, E>, context: C) => completeHandler(result, context),
