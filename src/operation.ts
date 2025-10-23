@@ -151,7 +151,7 @@ class OperationImpl<V, C, E extends Error = Error, R = AsyncResult<V, E>> implem
 
   constructor(state?: OperationState<V, C, E, R>) {
     // Copy the state object to avoid external mutations
-    this.state = { ...state };
+    this.state = state ? { ...state } : {};
   }
 
   /**
