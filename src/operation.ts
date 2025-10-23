@@ -160,7 +160,7 @@ class OperationImpl<V, C, E extends Error = Error, R = AsyncResult<V, E>> implem
   private appendToPipeline<V, NV, C, NC>(step: PipelineStep<V, NV, C, NC>): void {
     const { tail } = this.state;
     if (tail) {
-      tail.next = step;
+      this.state.tail.next = step;
       this.state.tail = step;
     } else {
       this.state.head = step;
