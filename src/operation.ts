@@ -158,14 +158,12 @@ class OperationImpl<V, C, E extends Error = Error, R = AsyncResult<V, E>> implem
    * Appends a new node to the pipeline linked list in O(1) time using tail pointer
    */
   private appendToPipeline<V, NV, C, NC>(step: PipelineStep<V, NV, C, NC>): void {
-    const { tail } = this.state;
-    if (tail) {
+    if (this.state.tail) {
       this.state.tail.next = step;
-      this.state.tail = step;
     } else {
       this.state.head = step;
-      this.state.tail = step;
     }
+    this.state.tail = step;
   }
 
   step<NV>(fn: StepFunction<V, C, NV>): Operation<NV, C, E, R> {
