@@ -177,7 +177,7 @@ class OperationImpl<V, C, E extends Error = Error, R = AsyncResult<V, E>> implem
       ) as R extends AsyncResult<V, E> ? AsyncResult<V, E> : Promise<R>;
     }
     
-    return this.executePipeline().then(({ result }) => result as AssertFinalType<typeof result, V>) as AsyncResult<V, E>;
+    return this.executePipeline().then(({ result }) => result) as R extends AsyncResult<V, E> ? AsyncResult<V, E> : Promise<R>;
   }
 
   private async executePipeline(): Promise<{ result: Result<V, E>; context: C }> {
@@ -245,7 +245,7 @@ export function operation<C = unknown, V = unknown>(initialContext?: C, initialV
  */
 export function typedOperation<C = unknown, V = unknown>(initialContext?: C, initialValue?: V): TypedOperation<V, C, Error> {
   const op = operation(initialContext, initialValue);
-  return op as TypedOperation<V, C, Error>;
+  return op as unknown as TypedOperation<V, C, Error>;
 }
 
 /**
