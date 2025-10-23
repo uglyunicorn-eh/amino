@@ -191,6 +191,14 @@ class OperationImpl<V, C, E extends Error = Error, R = AsyncResult<V, E>> implem
     return this as unknown as Operation<V, C, NE, R>;
   }
 
+  /**
+   * Creates a failure result using the configured error factory
+   */
+  private failure(error: unknown): Result<V, E> {
+    const normalizedError = error instanceof Error ? error : new Error(String(error));
+    return err(this.errorTransformer ? this.errorTransformer(normalizedError) : normalizedError) as Result<V, E>;
+  }
+
   complete(): R extends AsyncResult<V, E> ? AsyncResult<V, E> : Promise<R> {
     if (this.completeHandler) {
       return this.executePipeline().then(({ result, context }) => 
@@ -212,9 +220,9 @@ class OperationImpl<V, C, E extends Error = Error, R = AsyncResult<V, E>> implem
         const { err: error, res } = result;
         
         if (error !== undefined) {
-          // Step failed - apply error transformation if configured
+          // Step failed - apply error factory if configured
           return {
-            result: err(this.errorTransformer ? this.errorTransformer(error) : error) as Result<V, E>,
+            result: this.failure(error),
             context: currentContext as C
           };
         }
@@ -231,11 +239,8 @@ class OperationImpl<V, C, E extends Error = Error, R = AsyncResult<V, E>> implem
       };
     } catch (error) {
       // Unexpected error during execution
-      const transformedError = this.errorTransformer 
-        ? this.errorTransformer(error instanceof Error ? error : new Error(String(error)))
-        : (error instanceof Error ? error : new Error(String(error)));
       return {
-        result: err(transformedError) as Result<V, E>,
+        result: this.failure(error),
         context: this.initialContext as C
       };
     }
