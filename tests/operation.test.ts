@@ -489,7 +489,7 @@ describe('Operation Pipeline', () => {
         .complete();
 
       expect(result.err).toBeUndefined();
-      expect(result.res).toBe(2 as any);
+      expect(result.res).toBe(2);
     });
 
     test('operation with null and undefined values', async () => {
@@ -499,7 +499,7 @@ describe('Operation Pipeline', () => {
         .complete();
 
       expect(result.err).toBeUndefined();
-      expect(result.res).toBe('processed' as any);
+      expect(result.res).toBe('processed');
     });
 
     test('operation with empty arrays and objects', async () => {

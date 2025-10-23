@@ -17,11 +17,10 @@ export type PipelineFunction<V, NV, C, NC> = (context: C, value: V) => [NC, Resu
 type ErrorTransformer<E> = (originalError: Error) => E;
 
 /**
- * Internal pipeline step representation using linked list
+ * Internal pipeline step representation
  */
 type PipelineStep<V, NV, C, NC> = {
   fn: PipelineFunction<V, NV, C, NC>;
-  next?: PipelineStep<any, any, any, any>;
 };
 
 /**
@@ -72,8 +71,7 @@ export interface Operation<V, C, E extends Error = Error, R = AsyncResult<V, E>>
  * Internal operation state
  */
 type OperationState<V, C, E extends Error = Error, R = AsyncResult<V, E>> = {
-  stepsHead?: PipelineStep<any, any, any, any>;
-  stepsTail?: PipelineStep<any, any, any, any>;
+  steps: PipelineStep<any, any, any, any>[];
   errorTransformer?: ErrorTransformer<E>;
   initialValue?: V;
   initialContext?: C;
@@ -87,7 +85,7 @@ class OperationImpl<V, C, E extends Error = Error, R = AsyncResult<V, E>> implem
   constructor(private state: OperationState<V, C, E, R>) {}
 
   step<NV>(fn: (value: V, context: C) => Result<NV> | AsyncResult<NV>): Operation<NV, C, E, R> {
-    const { stepsHead, stepsTail, errorTransformer, initialValue, initialContext, completeHandler } = this.state;
+    const { steps, errorTransformer, initialValue, initialContext, completeHandler } = this.state;
     
     // Convert step function to unified pipeline function
     const pipelineFn: PipelineFunction<V, NV, C, C> = async (context: C, value: V) => {
@@ -98,25 +96,11 @@ class OperationImpl<V, C, E extends Error = Error, R = AsyncResult<V, E>> implem
       return [context, awaited]; // Context unchanged, result forwarded
     };
 
-    // Create new step and append to linked list (O(1) operation with tail pointer)
-    const newStep: PipelineStep<V, NV, C, C> = {
-      fn: pipelineFn,
-      next: undefined
-    };
-
-    let newHead = stepsHead;
-    let newTail = newStep;
-
-    if (stepsTail) {
-      stepsTail.next = newStep;
-      newTail = newStep;
-    } else {
-      newHead = newStep;
-    }
-
+    // Create new steps array with the new step appended (more efficient than spread)
+    const newSteps = [...steps, { fn: pipelineFn }];
+    
     return new OperationImpl<NV, C, E, R>({
-      stepsHead: newHead,
-      stepsTail: newTail,
+      steps: newSteps,
       errorTransformer,
       initialValue: initialValue as NV | undefined,
       initialContext,
@@ -125,31 +109,17 @@ class OperationImpl<V, C, E extends Error = Error, R = AsyncResult<V, E>> implem
   }
 
   context<NC>(fn: (context: C, value: V) => NC): Operation<V, NC, E, R> {
-    const { stepsHead, stepsTail, errorTransformer, initialValue, initialContext, completeHandler } = this.state;
+    const { steps, errorTransformer, initialValue, initialContext, completeHandler } = this.state;
     
     // Convert plain context function to unified pipeline function
     const pipelineFn: PipelineFunction<V, V, C, NC> = async (context: C, value: V) => 
       [fn(context, value), ok(value)]; // New context, value unchanged
 
-    // Create new step and append to linked list (O(1) operation with tail pointer)
-    const newStep: PipelineStep<V, V, C, NC> = {
-      fn: pipelineFn,
-      next: undefined
-    };
-
-    let newHead = stepsHead;
-    let newTail = newStep;
-
-    if (stepsTail) {
-      stepsTail.next = newStep;
-      newTail = newStep;
-    } else {
-      newHead = newStep;
-    }
-
+    // Create new steps array with the new step appended
+    const newSteps = [...steps, { fn: pipelineFn }];
+    
     return new OperationImpl<V, NC, E, R>({
-      stepsHead: newHead,
-      stepsTail: newTail,
+      steps: newSteps,
       errorTransformer,
       initialValue,
       initialContext: initialContext as NC | undefined,
@@ -160,15 +130,14 @@ class OperationImpl<V, C, E extends Error = Error, R = AsyncResult<V, E>> implem
   failsWith<NE extends Error>(errorClass: new (message: string, cause?: Error) => NE, message: string): Operation<V, C, NE, R>;
   failsWith(message: string): Operation<V, C, Error, R>;
   failsWith<NE extends Error>(errorClassOrMessage: any, message?: string): Operation<V, C, NE, R> | Operation<V, C, Error, R> {
-    const { stepsHead, stepsTail, initialValue, initialContext, completeHandler } = this.state;
+    const { steps, initialValue, initialContext, completeHandler } = this.state;
     
     if (typeof errorClassOrMessage === 'string') {
       const errorTransformer: ErrorTransformer<Error> = (originalError: Error) => 
         new Error(errorClassOrMessage, { cause: originalError });
       
       return new OperationImpl<V, C, Error, R>({
-        stepsHead,
-        stepsTail,
+        steps,
         errorTransformer,
         initialValue,
         initialContext,
@@ -179,8 +148,7 @@ class OperationImpl<V, C, E extends Error = Error, R = AsyncResult<V, E>> implem
         new (errorClassOrMessage as new (message: string, cause?: Error) => NE)(message!, originalError);
       
       return new OperationImpl<V, C, NE, R>({
-        stepsHead,
-        stepsTail,
+        steps,
         errorTransformer,
         initialValue,
         initialContext,
@@ -195,45 +163,41 @@ class OperationImpl<V, C, E extends Error = Error, R = AsyncResult<V, E>> implem
     if (completeHandler) {
       return this.executePipeline().then(({ result, context }) => 
         completeHandler(result, context as C)
-      ) as any;
+      ) as R extends AsyncResult<V, E> ? AsyncResult<V, E> : Promise<R>;
     }
     
-    return this.executePipeline().then(({ result }) => result) as any;
+    return this.executePipeline().then(({ result }) => result) as R extends AsyncResult<V, E> ? AsyncResult<V, E> : Promise<R>;
   }
 
-  private async executePipeline(): Promise<{ result: Result<V, E>; context: any }> {
-    const { stepsHead, errorTransformer, initialValue, initialContext } = this.state;
+  private async executePipeline(): Promise<{ result: Result<V, E>; context: C }> {
+    const { steps, errorTransformer, initialValue, initialContext } = this.state;
     
     try {
       let currentValue: any = initialValue;
       let currentContext: any = initialContext;
 
-      // Execute each step in sequence by traversing the linked list
-      let currentStep = stepsHead;
-      while (currentStep) {
-        const [newContext, result] = await currentStep.fn(currentContext, currentValue);
+      // Execute each step in sequence, checking for errors at each step.
+      for (const { fn } of steps) {
+        const [newContext, result] = await fn(currentContext, currentValue);
         const { err: error, res } = result;
         
         if (error !== undefined) {
           // Step failed - apply error transformation if configured
           return {
             result: err(errorTransformer ? errorTransformer(error) : error) as Result<V, E>,
-            context: currentContext
+            context: currentContext as C
           };
         }
         
         // Update both context and value from tuple
         currentContext = newContext;
         currentValue = res;
-        
-        // Move to next step
-        currentStep = currentStep.next;
       }
 
       // All steps completed successfully
       return {
         result: ok(currentValue),
-        context: currentContext
+        context: currentContext as C
       };
     } catch (error) {
       // Unexpected error during execution
@@ -242,7 +206,7 @@ class OperationImpl<V, C, E extends Error = Error, R = AsyncResult<V, E>> implem
         : (error instanceof Error ? error : new Error(String(error)));
       return {
         result: err(transformedError) as Result<V, E>,
-        context: initialContext
+        context: initialContext as C
       };
     }
   }
@@ -256,8 +220,7 @@ class OperationImpl<V, C, E extends Error = Error, R = AsyncResult<V, E>> implem
  */
 export function operation<C = unknown, V = unknown>(initialContext?: C, initialValue?: V): Operation<V, C, Error> {
   return new OperationImpl<V, C, Error>({
-    stepsHead: undefined,
-    stepsTail: undefined,
+    steps: [],
     initialValue,
     initialContext,
   });
@@ -273,8 +236,7 @@ export function makeOperation<C = unknown, E extends Error = Error, R = any>(
 ): <V = unknown>(initialContext?: C, initialValue?: V) => Operation<V, C, E, Promise<R>> {
   return <V = unknown>(initialContext?: C, initialValue?: V) => {
     return new OperationImpl<V, C, E, Promise<R>>({
-      stepsHead: undefined,
-      stepsTail: undefined,
+      steps: [],
       initialValue,
       initialContext,
       completeHandler: completeHandler as any,
