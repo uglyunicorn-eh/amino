@@ -48,8 +48,8 @@ describe('Operation Pipeline', () => {
 
   test('can chain failsWith methods', () => {
     class CustomError extends Error {
-      constructor(message: string, cause?: Error) {
-        super(message, { cause });
+      constructor(message: string, options?: { cause?: Error }) {
+        super(message, options);
       }
     }
 
@@ -66,8 +66,8 @@ describe('Operation Pipeline', () => {
 
   test('can mix step, context, and failsWith methods', () => {
     class CustomError extends Error {
-      constructor(message: string, cause?: Error) {
-        super(message, { cause });
+      constructor(message: string, options?: { cause?: Error }) {
+        super(message, options);
       }
     }
 
@@ -145,8 +145,8 @@ describe('Operation Pipeline', () => {
 
   test('pipeline execution with error transformation', async () => {
     class CustomError extends Error {
-      constructor(message: string, cause?: Error) {
-        super(message, { cause });
+      constructor(message: string, options?: { cause?: Error }) {
+        super(message, options);
       }
     }
 
@@ -159,8 +159,9 @@ describe('Operation Pipeline', () => {
     expect(result.res).toBeUndefined();
     expect(result.err).toBeInstanceOf(CustomError);
     expect(result.err?.message).toBe('Operation failed');
-    expect(result.err?.cause).toBeInstanceOf(Error);
-    expect((result.err?.cause as Error)?.message).toBe('Step failed');
+    expect(result.err?.cause).toBeDefined();
+    expect((result.err as any)?.cause).toBeInstanceOf(Error);
+    expect((result.err as any)?.cause?.message).toBe('Step failed');
   });
 
   test('step method preserves types', () => {
@@ -183,8 +184,8 @@ describe('Operation Pipeline', () => {
 
   test('failsWith with custom error class', () => {
     class ValidationError extends Error {
-      constructor(message: string, cause?: Error) {
-        super(message, { cause });
+      constructor(message: string, options?: { cause?: Error }) {
+        super(message, options);
       }
     }
 
@@ -290,8 +291,8 @@ describe('Operation Pipeline', () => {
 
     test('complex chaining with multiple types', () => {
       class DatabaseError extends Error {
-        constructor(message: string, cause?: Error) {
-          super(message, { cause });
+        constructor(message: string, options?: { cause?: Error }) {
+          super(message, options);
         }
       }
 
@@ -313,14 +314,14 @@ describe('Operation Pipeline', () => {
 
     test('failsWith with different error classes', () => {
       class ValidationError extends Error {
-        constructor(message: string, cause?: Error) {
-          super(message, { cause });
+        constructor(message: string, options?: { cause?: Error }) {
+          super(message, options);
         }
       }
 
       class NetworkError extends Error {
-        constructor(message: string, cause?: Error) {
-          super(message, { cause });
+        constructor(message: string, options?: { cause?: Error }) {
+          super(message, options);
         }
       }
 
@@ -455,8 +456,8 @@ describe('Operation Pipeline', () => {
 
     test('unexpected error with error transformation', async () => {
       class CustomError extends Error {
-        constructor(message: string, cause?: Error) {
-          super(message, { cause });
+        constructor(message: string, options?: { cause?: Error }) {
+          super(message, options);
         }
       }
 
@@ -471,8 +472,9 @@ describe('Operation Pipeline', () => {
       expect(result.res).toBeUndefined();
       expect(result.err).toBeInstanceOf(CustomError);
       expect(result.err?.message).toBe('Operation failed');
-      expect(result.err?.cause).toBeInstanceOf(Error);
-      expect((result.err?.cause as Error)?.message).toBe('Step failed');
+      expect(result.err?.cause).toBeDefined();
+      expect((result.err as any)?.cause).toBeInstanceOf(Error);
+      expect((result.err as any)?.cause?.message).toBe('Step failed');
     });
 
     test('operation with complex data types', async () => {
@@ -529,8 +531,8 @@ describe('Operation Pipeline', () => {
 
     test('failsWith with error class with proper signature', () => {
       class ProperError extends Error {
-        constructor(message: string, cause?: Error) {
-          super(message, { cause });
+        constructor(message: string, options?: { cause?: Error }) {
+          super(message, options);
           this.name = 'ProperError';
         }
       }
@@ -543,8 +545,8 @@ describe('Operation Pipeline', () => {
 
     test('error transformation with custom error class execution', async () => {
       class CustomError extends Error {
-        constructor(message: string, cause?: Error) {
-          super(message, { cause });
+        constructor(message: string, options?: { cause?: Error }) {
+          super(message, options);
           this.name = 'CustomError';
         }
       }
@@ -558,8 +560,9 @@ describe('Operation Pipeline', () => {
       expect(result.res).toBeUndefined();
       expect(result.err).toBeInstanceOf(CustomError);
       expect(result.err?.message).toBe('Custom operation failed');
-      expect(result.err?.cause).toBeInstanceOf(Error);
-      expect((result.err?.cause as Error)?.message).toBe('Step failed');
+      expect(result.err?.cause).toBeDefined();
+      expect((result.err as any)?.cause).toBeInstanceOf(Error);
+      expect((result.err as any)?.cause?.message).toBe('Step failed');
     });
 
     test('error transformation with generic error execution', async () => {
@@ -604,8 +607,8 @@ describe('Operation Pipeline', () => {
 
     test('failsWith preserves error type', () => {
       class CustomError extends Error {
-        constructor(message: string, cause?: Error) {
-          super(message, { cause });
+        constructor(message: string, options?: { cause?: Error }) {
+          super(message, options);
         }
       }
 
@@ -813,8 +816,8 @@ describe('makeOperation Factory', () => {
 
   test('failsWith works with makeOperation', async () => {
     class CustomError extends Error {
-      constructor(message: string, cause?: Error) {
-        super(message, { cause });
+      constructor(message: string, options?: { cause?: Error }) {
+        super(message, options);
       }
     }
 

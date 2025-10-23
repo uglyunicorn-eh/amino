@@ -1,13 +1,43 @@
 import { type Result, type AsyncResult, ok, err } from './result.ts';
 
 /**
- * Unified pipeline function signature - transforms both context and value
- * Context transformations always succeed, value transformations return Result
+ * Utility type for any Result or AsyncResult
+ */
+export type AnyResult<T = any> = Result<T> | AsyncResult<T>;
+
+/**
+ * Step function signature - transforms value and returns Result
+ * @param value - Current value
+ * @param context - Current context
+ * @returns Result or AsyncResult of new value
+ */
+export type StepFunction<V, C, NV> = (value: V, context: C) => AnyResult<NV>;
+
+/**
+ * Context function signature - transforms context
  * @param context - Current context
  * @param value - Current value
- * @returns Tuple of [new context, Result of new value]
+ * @returns New context (sync or async)
  */
-export type PipelineFunction<V, NV, C, NC> = (context: C, value: V) => [NC, Result<NV>] | Promise<[NC, Result<NV>]>;
+export type ContextFunction<C, V, NC> = (context: C, value: V) => NC | Promise<NC>;
+
+/**
+ * Error factory signature - matches standard Error constructor
+ * @param message - Error message
+ * @param options - Error options including cause
+ * @returns New error instance
+ */
+export type ErrorFactory<E extends Error> = new (message: string, options?: { cause?: Error }) => E;
+
+/**
+ * Unified pipeline function signature - transforms both context and value
+ * Context transformations always succeed, value transformations return Result
+ * Always async for consistency
+ * @param context - Current context
+ * @param value - Current value
+ * @returns Promise of tuple [new context, Result of new value]
+ */
+export type PipelineFunction<V, NV, C, NC> = (context: C, value: V) => Promise<[NC, Result<NV>]>;
 
 /**
  * Error transformer signature - transforms errors
@@ -36,14 +66,14 @@ export interface Operation<V, C, E extends Error = Error, R = AsyncResult<V, E>>
    * @param fn - Step function that transforms the value
    * @returns New operation with updated value type
    */
-  step<NV>(fn: (value: V, context: C) => Result<NV> | AsyncResult<NV>): Operation<NV, C, E, R>;
+  step<NV>(fn: StepFunction<V, C, NV>): Operation<NV, C, E, R>;
 
   /**
    * Add a context transformation step to the pipeline
    * @param fn - Context function that transforms the context (returns new context directly)
    * @returns New operation with updated context type
    */
-  context<NC>(fn: (context: C, value: V) => NC): Operation<V, NC, E, R>;
+  context<NC>(fn: ContextFunction<C, V, NC>): Operation<V, NC, E, R>;
 
   /**
    * Set error transformation for the operation with custom error class
@@ -51,7 +81,7 @@ export interface Operation<V, C, E extends Error = Error, R = AsyncResult<V, E>>
    * @param message - Error message
    * @returns New operation with updated error type
    */
-  failsWith<NE extends Error>(errorClass: new (message: string, cause?: Error) => NE, message: string): Operation<V, C, NE, R>;
+  failsWith<NE extends Error>(errorClass: ErrorFactory<NE>, message: string): Operation<V, C, NE, R>;
 
   /**
    * Set error transformation for the operation with generic error
@@ -71,9 +101,9 @@ export interface Operation<V, C, E extends Error = Error, R = AsyncResult<V, E>>
  * Type-safe operation wrapper that explicitly defines the final result type
  */
 export interface TypedOperation<V, C, E extends Error = Error> {
-  step<NV>(fn: (value: V, context: C) => Result<NV> | AsyncResult<NV>): TypedOperation<NV, C, E>;
-  context<NC>(fn: (context: C, value: V) => NC): TypedOperation<V, NC, E>;
-  failsWith<NE extends Error>(errorClass: new (message: string, cause?: Error) => NE, message: string): TypedOperation<V, C, NE>;
+  step<NV>(fn: StepFunction<V, C, NV>): TypedOperation<NV, C, E>;
+  context<NC>(fn: ContextFunction<C, V, NC>): TypedOperation<V, NC, E>;
+  failsWith<NE extends Error>(errorClass: ErrorFactory<NE>, message: string): TypedOperation<V, C, NE>;
   failsWith(message: string): TypedOperation<V, C, Error>;
   complete(): Promise<AsyncResult<V, E>>;
 }
@@ -95,16 +125,13 @@ type OperationState<V, C, E extends Error = Error, R = AsyncResult<V, E>> = {
 class OperationImpl<V, C, E extends Error = Error, R = AsyncResult<V, E>> implements Operation<V, C, E, R> {
   constructor(private state: OperationState<V, C, E, R>) {}
 
-  step<NV>(fn: (value: V, context: C) => Result<NV> | AsyncResult<NV>): Operation<NV, C, E, R> {
+  step<NV>(fn: StepFunction<V, C, NV>): Operation<NV, C, E, R> {
     const { steps, errorTransformer, initialValue, initialContext, completeHandler } = this.state;
     
     // Convert step function to unified pipeline function
     const pipelineFn: PipelineFunction<V, NV, C, C> = async (context: C, value: V) => {
-      const result = fn(value, context);
-      const awaited = (result && typeof (result as any).then === 'function') 
-        ? await result 
-        : result as Result<NV>;
-      return [context, awaited]; // Context unchanged, result forwarded
+      const result = await fn(value, context);
+      return [context, result]; // Context unchanged, result forwarded
     };
 
     // Create new steps array with the new step appended
@@ -119,12 +146,14 @@ class OperationImpl<V, C, E extends Error = Error, R = AsyncResult<V, E>> implem
     });
   }
 
-  context<NC>(fn: (context: C, value: V) => NC): Operation<V, NC, E, R> {
+  context<NC>(fn: ContextFunction<C, V, NC>): Operation<V, NC, E, R> {
     const { steps, errorTransformer, initialValue, initialContext, completeHandler } = this.state;
     
     // Convert plain context function to unified pipeline function
-    const pipelineFn: PipelineFunction<V, V, C, NC> = async (context: C, value: V) => 
-      [fn(context, value), ok(value)]; // New context, value unchanged
+    const pipelineFn: PipelineFunction<V, V, C, NC> = async (context: C, value: V) => {
+      const newContext = await fn(context, value);
+      return [newContext, ok(value)]; // New context, value unchanged
+    };
 
     // Create new steps array with the new step appended
     const newSteps = [...steps, { fn: pipelineFn }];
@@ -138,7 +167,7 @@ class OperationImpl<V, C, E extends Error = Error, R = AsyncResult<V, E>> implem
     });
   }
 
-  failsWith<NE extends Error>(errorClass: new (message: string, cause?: Error) => NE, message: string): Operation<V, C, NE, R>;
+  failsWith<NE extends Error>(errorClass: ErrorFactory<NE>, message: string): Operation<V, C, NE, R>;
   failsWith(message: string): Operation<V, C, Error, R>;
   failsWith<NE extends Error>(errorClassOrMessage: any, message?: string): Operation<V, C, NE, R> | Operation<V, C, Error, R> {
     const { steps, initialValue, initialContext, completeHandler } = this.state;
@@ -156,7 +185,7 @@ class OperationImpl<V, C, E extends Error = Error, R = AsyncResult<V, E>> implem
       });
     } else {
       const errorTransformer: ErrorTransformer<NE> = (originalError: Error): NE => 
-        new (errorClassOrMessage as new (message: string, cause?: Error) => NE)(message!, originalError);
+        new (errorClassOrMessage as ErrorFactory<NE>)(message!, { cause: originalError });
       
       return new OperationImpl<V, C, NE, R>({
         steps,
