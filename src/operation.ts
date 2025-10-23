@@ -24,9 +24,9 @@ type PipelineStep<V, NV, C, NC> = {
 };
 
 /**
- * Operation interface - chainable pipeline builder
- * @param V - Value type
- * @param C - Context type  
+ * Type-safe Operation interface - chainable pipeline builder
+ * @param V - Final value type after all transformations
+ * @param C - Final context type after all transformations
  * @param E - Error type (must extend Error)
  * @param R - Return type of complete() method
  */
@@ -68,6 +68,17 @@ export interface Operation<V, C, E extends Error = Error, R = AsyncResult<V, E>>
 }
 
 /**
+ * Type-safe operation wrapper that explicitly defines the final result type
+ */
+export interface TypedOperation<V, C, E extends Error = Error> {
+  step<NV>(fn: (value: V, context: C) => Result<NV> | AsyncResult<NV>): TypedOperation<NV, C, E>;
+  context<NC>(fn: (context: C, value: V) => NC): TypedOperation<V, NC, E>;
+  failsWith<NE extends Error>(errorClass: new (message: string, cause?: Error) => NE, message: string): TypedOperation<V, C, NE>;
+  failsWith(message: string): TypedOperation<V, C, Error>;
+  complete(): Promise<AsyncResult<V, E>>;
+}
+
+/**
  * Internal operation state
  */
 type OperationState<V, C, E extends Error = Error, R = AsyncResult<V, E>> = {
@@ -96,7 +107,7 @@ class OperationImpl<V, C, E extends Error = Error, R = AsyncResult<V, E>> implem
       return [context, awaited]; // Context unchanged, result forwarded
     };
 
-    // Create new steps array with the new step appended (more efficient than spread)
+    // Create new steps array with the new step appended
     const newSteps = [...steps, { fn: pipelineFn }];
     
     return new OperationImpl<NV, C, E, R>({
@@ -166,7 +177,7 @@ class OperationImpl<V, C, E extends Error = Error, R = AsyncResult<V, E>> implem
       ) as R extends AsyncResult<V, E> ? AsyncResult<V, E> : Promise<R>;
     }
     
-    return this.executePipeline().then(({ result }) => result) as R extends AsyncResult<V, E> ? AsyncResult<V, E> : Promise<R>;
+    return this.executePipeline().then(({ result }) => result as AssertFinalType<typeof result, V>) as AsyncResult<V, E>;
   }
 
   private async executePipeline(): Promise<{ result: Result<V, E>; context: C }> {
@@ -224,6 +235,17 @@ export function operation<C = unknown, V = unknown>(initialContext?: C, initialV
     initialValue,
     initialContext,
   });
+}
+
+/**
+ * Creates a type-safe operation pipeline
+ * @param initialContext - Optional initial context for the pipeline
+ * @param initialValue - Optional initial value to start the pipeline with
+ * @returns A type-safe operation instance
+ */
+export function typedOperation<C = unknown, V = unknown>(initialContext?: C, initialValue?: V): TypedOperation<V, C, Error> {
+  const op = operation(initialContext, initialValue);
+  return op as TypedOperation<V, C, Error>;
 }
 
 /**
