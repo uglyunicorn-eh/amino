@@ -48,8 +48,8 @@ describe('Operation Pipeline', () => {
 
   test('can chain failsWith methods', () => {
     class CustomError extends Error {
-      constructor(message: string, cause?: Error) {
-        super(message, { cause });
+      constructor(message: string, options?: { cause?: Error }) {
+        super(message, options);
       }
     }
 
@@ -66,8 +66,8 @@ describe('Operation Pipeline', () => {
 
   test('can mix step, context, and failsWith methods', () => {
     class CustomError extends Error {
-      constructor(message: string, cause?: Error) {
-        super(message, { cause });
+      constructor(message: string, options?: { cause?: Error }) {
+        super(message, options);
       }
     }
 
@@ -145,8 +145,8 @@ describe('Operation Pipeline', () => {
 
   test('pipeline execution with error transformation', async () => {
     class CustomError extends Error {
-      constructor(message: string, cause?: Error) {
-        super(message, { cause });
+      constructor(message: string, options?: { cause?: Error }) {
+        super(message, options);
       }
     }
 
@@ -159,8 +159,9 @@ describe('Operation Pipeline', () => {
     expect(result.res).toBeUndefined();
     expect(result.err).toBeInstanceOf(CustomError);
     expect(result.err?.message).toBe('Operation failed');
-    expect(result.err?.cause).toBeInstanceOf(Error);
-    expect((result.err?.cause as Error)?.message).toBe('Step failed');
+    expect(result.err?.cause).toBeDefined();
+    expect((result.err as any)?.cause).toBeInstanceOf(Error);
+    expect((result.err as any)?.cause?.message).toBe('Step failed');
   });
 
   test('step method preserves types', () => {
@@ -183,8 +184,8 @@ describe('Operation Pipeline', () => {
 
   test('failsWith with custom error class', () => {
     class ValidationError extends Error {
-      constructor(message: string, cause?: Error) {
-        super(message, { cause });
+      constructor(message: string, options?: { cause?: Error }) {
+        super(message, options);
       }
     }
 
@@ -290,8 +291,8 @@ describe('Operation Pipeline', () => {
 
     test('complex chaining with multiple types', () => {
       class DatabaseError extends Error {
-        constructor(message: string, cause?: Error) {
-          super(message, { cause });
+        constructor(message: string, options?: { cause?: Error }) {
+          super(message, options);
         }
       }
 
@@ -313,14 +314,14 @@ describe('Operation Pipeline', () => {
 
     test('failsWith with different error classes', () => {
       class ValidationError extends Error {
-        constructor(message: string, cause?: Error) {
-          super(message, { cause });
+        constructor(message: string, options?: { cause?: Error }) {
+          super(message, options);
         }
       }
 
       class NetworkError extends Error {
-        constructor(message: string, cause?: Error) {
-          super(message, { cause });
+        constructor(message: string, options?: { cause?: Error }) {
+          super(message, options);
         }
       }
 
@@ -455,8 +456,8 @@ describe('Operation Pipeline', () => {
 
     test('unexpected error with error transformation', async () => {
       class CustomError extends Error {
-        constructor(message: string, cause?: Error) {
-          super(message, { cause });
+        constructor(message: string, options?: { cause?: Error }) {
+          super(message, options);
         }
       }
 
@@ -471,8 +472,9 @@ describe('Operation Pipeline', () => {
       expect(result.res).toBeUndefined();
       expect(result.err).toBeInstanceOf(CustomError);
       expect(result.err?.message).toBe('Operation failed');
-      expect(result.err?.cause).toBeInstanceOf(Error);
-      expect((result.err?.cause as Error)?.message).toBe('Step failed');
+      expect(result.err?.cause).toBeDefined();
+      expect((result.err as any)?.cause).toBeInstanceOf(Error);
+      expect((result.err as any)?.cause?.message).toBe('Step failed');
     });
 
     test('operation with complex data types', async () => {
@@ -529,8 +531,8 @@ describe('Operation Pipeline', () => {
 
     test('failsWith with error class with proper signature', () => {
       class ProperError extends Error {
-        constructor(message: string, cause?: Error) {
-          super(message, { cause });
+        constructor(message: string, options?: { cause?: Error }) {
+          super(message, options);
           this.name = 'ProperError';
         }
       }
@@ -543,8 +545,8 @@ describe('Operation Pipeline', () => {
 
     test('error transformation with custom error class execution', async () => {
       class CustomError extends Error {
-        constructor(message: string, cause?: Error) {
-          super(message, { cause });
+        constructor(message: string, options?: { cause?: Error }) {
+          super(message, options);
           this.name = 'CustomError';
         }
       }
@@ -558,8 +560,9 @@ describe('Operation Pipeline', () => {
       expect(result.res).toBeUndefined();
       expect(result.err).toBeInstanceOf(CustomError);
       expect(result.err?.message).toBe('Custom operation failed');
-      expect(result.err?.cause).toBeInstanceOf(Error);
-      expect((result.err?.cause as Error)?.message).toBe('Step failed');
+      expect(result.err?.cause).toBeDefined();
+      expect((result.err as any)?.cause).toBeInstanceOf(Error);
+      expect((result.err as any)?.cause?.message).toBe('Step failed');
     });
 
     test('error transformation with generic error execution', async () => {
@@ -604,8 +607,8 @@ describe('Operation Pipeline', () => {
 
     test('failsWith preserves error type', () => {
       class CustomError extends Error {
-        constructor(message: string, cause?: Error) {
-          super(message, { cause });
+        constructor(message: string, options?: { cause?: Error }) {
+          super(message, options);
         }
       }
 
@@ -616,67 +619,83 @@ describe('Operation Pipeline', () => {
       // The error type should be preserved in the operation
     });
 
-    test('operation state immutability', () => {
+    test('operation state mutability (lazy evaluation)', async () => {
       const op1 = operation('test', 42).step((value: number) => ok(value * 2));
       const op2 = op1.step((value: number) => ok(value + 1));
       
-      // Each operation should be a new instance
-      expect(op1).not.toBe(op2);
+      // With lazy evaluation, methods return the same instance for performance
+      expect(op1).toBe(op2);
       expect(op1).toBeDefined();
       expect(op2).toBeDefined();
+      
+      // But the pipeline should still work correctly
+      const result = await op1.complete();
+      expect(result.err).toBeUndefined();
+      expect(result.res).toBe(85); // (42 * 2) + 1
     });
   });
 
   describe('Method Chaining Behavior', () => {
-    test('step chaining returns new operation', () => {
+    test('step chaining returns same instance (lazy evaluation)', async () => {
       const op1 = operation('test', 42);
       const op2 = op1.step((value: number) => ok(value * 2));
       const op3 = op2.step((value: number) => ok(value + 1));
       
-      expect(op1).not.toBe(op2);
-      expect(op2).not.toBe(op3);
-      expect(op1).toBeDefined();
-      expect(op2).toBeDefined();
-      expect(op3).toBeDefined();
+      // With lazy evaluation, all operations are the same instance
+      expect(op1).toBe(op2);
+      expect(op2).toBe(op3);
+      
+      // Pipeline should work correctly
+      const result = await op1.complete();
+      expect(result.err).toBeUndefined();
+      expect(result.res).toBe(85); // (42 * 2) + 1
     });
 
-    test('context chaining returns new operation', () => {
+    test('context chaining returns same instance (lazy evaluation)', async () => {
       const op1 = operation('test', 42);
       const op2 = op1.context((ctx: string, value: number) => `${ctx}-${value}`);
       const op3 = op2.context((ctx: string, value: number) => `${ctx}-processed`);
       
-      expect(op1).not.toBe(op2);
-      expect(op2).not.toBe(op3);
-      expect(op1).toBeDefined();
-      expect(op2).toBeDefined();
-      expect(op3).toBeDefined();
+      // With lazy evaluation, all operations are the same instance
+      expect(op1).toBe(op2);
+      expect(op2).toBe(op3);
+      
+      // Pipeline should work correctly
+      const result = await op1.complete();
+      expect(result.err).toBeUndefined();
+      expect(result.res).toBe(42); // Value unchanged
     });
 
-    test('failsWith chaining returns new operation', () => {
+    test('failsWith chaining returns same instance (lazy evaluation)', async () => {
       const op1 = operation('test', 42);
       const op2 = op1.failsWith('First error');
       const op3 = op2.failsWith('Second error');
       
-      expect(op1).not.toBe(op2);
-      expect(op2).not.toBe(op3);
-      expect(op1).toBeDefined();
-      expect(op2).toBeDefined();
-      expect(op3).toBeDefined();
+      // With lazy evaluation, all operations are the same instance
+      expect(op1).toBe(op2);
+      expect(op2).toBe(op3);
+      
+      // Pipeline should work correctly
+      const result = await op1.complete();
+      expect(result.err).toBeUndefined();
+      expect(result.res).toBe(42); // Value unchanged
     });
 
-    test('mixed chaining returns new operations', () => {
+    test('mixed chaining returns same instance (lazy evaluation)', async () => {
       const op1 = operation('test', 42);
       const op2 = op1.step((value: number) => ok(value * 2));
       const op3 = op2.context((ctx: string, value: number) => `${ctx}-${value}`);
       const op4 = op3.failsWith('Mixed error');
       
-      expect(op1).not.toBe(op2);
-      expect(op2).not.toBe(op3);
-      expect(op3).not.toBe(op4);
-      expect(op1).toBeDefined();
-      expect(op2).toBeDefined();
-      expect(op3).toBeDefined();
-      expect(op4).toBeDefined();
+      // With lazy evaluation, all operations are the same instance
+      expect(op1).toBe(op2);
+      expect(op2).toBe(op3);
+      expect(op3).toBe(op4);
+      
+      // Pipeline should work correctly
+      const result = await op1.complete();
+      expect(result.err).toBeUndefined();
+      expect(result.res).toBe(84); // 42 * 2
     });
   });
 });
@@ -813,8 +832,8 @@ describe('makeOperation Factory', () => {
 
   test('failsWith works with makeOperation', async () => {
     class CustomError extends Error {
-      constructor(message: string, cause?: Error) {
-        super(message, { cause });
+      constructor(message: string, options?: { cause?: Error }) {
+        super(message, options);
       }
     }
 

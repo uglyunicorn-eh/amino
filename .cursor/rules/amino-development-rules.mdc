@@ -1,0 +1,83 @@
+---
+description: Amino Project Development Rules - Type-safe Result pattern implementation guidelines
+globs: "*.ts, *.tsx, *.js, *.jsx, *.test.ts, *.test.tsx, package.json, tsconfig.json"
+alwaysApply: true
+---
+
+# Amino Project Development Rules
+
+## Work Estimation & Planning
+- **Always estimate work complexity** before starting any task
+- **Ask for clarification** if the scope is unclear or ambiguous
+- **For complex work (3+ distinct steps)**: Create a detailed plan explaining the solution approach before implementation
+- **Break down large tasks** into smaller, manageable pieces with clear deliverables
+
+## Code Quality Standards
+- **100% test coverage required** - Every function, branch, and edge case must be tested
+- **Zero linter issues** - All TypeScript strict mode checks must pass
+- **No `as any` patterns** - Type casting should be explicit and controlled when necessary
+- **Use proper type assertions** instead of `as any` - prefer `as Type` or type guards
+
+## TypeScript Best Practices
+- **Leverage strict TypeScript** - Use the existing strict configuration
+- **Type safety first** - Prefer compile-time type checking over runtime checks
+- **Explicit type annotations** for complex types and function signatures
+- **Use type guards** and discriminated unions for type narrowing
+- **Avoid `any` type** - Use `unknown` or specific types instead
+
+## Testing Requirements
+- **Comprehensive test coverage** - Test all public APIs, edge cases, and error scenarios
+- **Test both success and failure paths** - Every operation should have error handling tests
+- **Async/sync behavior testing** - Test mixed async and synchronous operations
+- **Type safety verification** - Include tests that verify TypeScript type inference works correctly
+- **Performance considerations** - Test with realistic data sizes and complexity
+
+## Development Workflow
+- **Use Bun** instead of Node.js, npm, pnpm, or vite (as per workspace rules)
+- **Run tests before committing** - Ensure all tests pass and coverage is maintained
+- **Build verification** - Always verify the build completes without errors
+- **Incremental development** - Make small, focused changes that can be easily reviewed
+
+## Code Organization
+- **Functional programming patterns** - Maintain the Result/Either pattern consistency
+- **Immutable operations** - Operations should return new instances, not mutate existing ones
+- **Clear separation of concerns** - Keep operation logic, result handling, and error transformation separate
+- **Consistent API design** - Follow the established patterns for method chaining and type safety
+
+## Error Handling
+- **Explicit error types** - Use custom error classes when appropriate
+- **Error transformation** - Provide clear error messages and preserve error context
+- **Graceful degradation** - Handle unexpected errors without breaking the pipeline
+- **Error propagation** - Maintain error context through the operation chain
+
+## Documentation & Comments
+- **JSDoc for public APIs** - Document all exported functions and interfaces
+- **Type annotations** - Use TypeScript types as documentation
+- **Clear naming** - Use descriptive names that explain intent
+- **Example usage** - Include practical examples in tests and documentation
+
+## Performance & Optimization
+- **Efficient pipeline execution** - Minimize unnecessary allocations and transformations
+- **Lazy evaluation** - Only execute steps when needed
+- **Memory management** - Avoid memory leaks in long-running operations
+- **Async optimization** - Handle async operations efficiently without blocking
+
+## Code Review Checklist
+- [ ] All tests pass with 100% coverage
+- [ ] No linter errors or warnings
+- [ ] No `as any` usage (controlled type casting only)
+- [ ] Type safety maintained throughout
+- [ ] Error handling is comprehensive
+- [ ] Performance impact is acceptable
+- [ ] Code follows established patterns
+- [ ] Documentation is updated if needed
+
+## Emergency Procedures
+- **If tests fail**: Fix tests before proceeding with new features
+- **If build fails**: Address TypeScript errors immediately
+- **If coverage drops**: Add missing tests before continuing
+- **If linter errors**: Fix all issues before committing changes
+
+---
+
+*These rules ensure consistent, high-quality development while maintaining the project's type safety and functional programming principles.*

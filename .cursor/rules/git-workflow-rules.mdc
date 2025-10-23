@@ -1,0 +1,57 @@
+---
+description: Git workflow rules for checkpoint management and branching
+globs: "*.ts, *.tsx, *.js, *.jsx, *.test.ts, *.test.tsx, package.json, tsconfig.json, *.md"
+alwaysApply: true
+---
+
+# Git Workflow Rules
+
+## Checkpoint Management
+- **When asked to create a checkpoint**: Create a new branch with pattern `checkpoint/...` where `...` is a short, descriptive headline
+- **Checkpoint naming**: Use kebab-case for multi-word headlines (e.g., `checkpoint/feature-complete`, `checkpoint/tests-passing`)
+- **Checkpoint commits**: Include a clear commit message describing what was accomplished
+- **Branch protection**: Checkpoints should be safe points that can be returned to if needed
+
+## Branch Naming Conventions
+- **Feature branches**: `feature/description` (e.g., `feature/add-validation`)
+- **Bug fixes**: `fix/description` (e.g., `fix/memory-leak`)
+- **Checkpoints**: `checkpoint/description` (e.g., `checkpoint/refactor-complete`)
+- **Hotfixes**: `hotfix/description` (e.g., `hotfix/security-patch`)
+
+## Commit Message Guidelines
+- **Format**: Use conventional commits when possible (`feat:`, `fix:`, `test:`, `refactor:`, etc.)
+- **Checkpoint messages**: Should clearly describe the state achieved (e.g., "checkpoint: All tests passing with 100% coverage")
+- **Descriptive**: Include context about what was accomplished or what the checkpoint represents
+
+## Checkpoint Workflow
+1. **Create checkpoint branch** from current working state
+2. **Commit current changes** with descriptive message
+3. **Continue development** from checkpoint or switch back as needed
+4. **Push when ready** - Only push to remote when explicitly requested
+
+## Example Checkpoint Commands
+```bash
+# Create checkpoint for completed feature
+git checkout -b checkpoint/feature-complete
+git add .
+git commit -m "checkpoint: Feature implementation complete with full test coverage"
+
+# Create checkpoint for passing tests
+git checkout -b checkpoint/tests-passing
+git add .
+git commit -m "checkpoint: All tests passing, ready for refactoring"
+
+# Push only when explicitly requested
+git push origin checkpoint/feature-complete
+```
+
+## Checkpoint Best Practices
+- **Frequent checkpoints**: Create checkpoints at logical completion points
+- **Clean state**: Ensure checkpoints represent a working, testable state
+- **Documentation**: Include brief description of what the checkpoint represents
+- **Recovery points**: Use checkpoints as safe fallback points during development
+- **Integration**: Checkpoints should integrate cleanly with main development workflow
+
+---
+
+*These rules ensure consistent checkpoint management and provide safe recovery points during development.*
