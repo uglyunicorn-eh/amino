@@ -217,15 +217,15 @@ This enables seamless integration with any framework or custom return type requi
 ### Result Functions
 
 - `ok<T>(value: T): Success<T>` - Create success result
-- `err(error: Error | string): Fail<Error>` - Create error result
-- `trycatch<T>(fn: () => T | Promise<T>): Result<T>` - Wrap function in Result
+- `err(error: Error | string): Failure<Error>` - Create error result
+- `trycatch<T>(fn: () => T | Promise<T>): Result<T> | AsyncResult<T>` - Wrap function in Result
 
 ### Operation
 
 - `operation<C, V>(context?: C, value?: V)` - Create operation pipeline
 - `.step<NV>(fn: (value: V, context: C) => Result<NV> | Promise<Result<NV>>)` - Add processing step
 - `.context<NC>(fn: (context: C, value: V) => NC | Promise<NC>)` - Transform context
-- `.failsWith<E>(ErrorClass, message)` - Set custom error type
+- `.failsWith<NE>(ErrorClass, message)` - Set custom error type
 - `.failsWith(message)` - Set generic error type
 - `.compile()` - Compile pipeline for optimal performance (54-91% faster)
 - `.compile(context)` - Compile pipeline with explicit context binding
