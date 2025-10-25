@@ -187,30 +187,19 @@ class OperationImpl<V, C, E extends Error = Error, R = AsyncResult<V, E>> implem
   compile(): CompiledPipelineWithContext<V, E>;
   compile(context: C): CompiledPipelineWithContext<V, E>;
   compile(context?: C): CompiledPipelineWithContext<V, E> {
-    const boundContext = context || this.state.initialContext;
-    
-    if (boundContext !== undefined) {
-      return (value: V): Promise<Result<V, E>> => this.executeCompiledPipeline(value, boundContext as C);
-    } else {
-      throw new Error('Cannot compile pipeline without context. Provide context in compile() or operation()');
-    }
+    const boundContext = context || this.state.initialContext || ({} as C);
+    return (value: V): Promise<Result<V, E>> => this.executeCompiledPipeline(value, boundContext);
   }
 
   complete(): R extends AsyncResult<V, E> ? AsyncResult<V, E> : Promise<R> {
     const { completeHandler, initialValue, initialContext } = this.state;
+    const context = initialContext || ({} as C);
     
-    if (initialContext !== undefined) {
-      if (completeHandler) {
-        return this.executeCompiledPipelineWithContext(initialValue as V, initialContext as C)
-          .then(({ result, context }) => completeHandler(result, context)) as R extends AsyncResult<V, E> ? AsyncResult<V, E> : Promise<R>;
-      }
-      return this.compile()(initialValue as V) as R extends AsyncResult<V, E> ? AsyncResult<V, E> : Promise<R>;
-    } else {
-      const resultPromise = this.executeCompiledPipeline(initialValue as V, undefined as C);
-      return completeHandler 
-        ? resultPromise.then((result) => completeHandler(result, undefined as C)) as R extends AsyncResult<V, E> ? AsyncResult<V, E> : Promise<R>
-        : resultPromise as R extends AsyncResult<V, E> ? AsyncResult<V, E> : Promise<R>;
+    if (completeHandler) {
+      return this.executeCompiledPipelineWithContext(initialValue as V, context)
+        .then(({ result, context: finalContext }) => completeHandler(result, finalContext)) as R extends AsyncResult<V, E> ? AsyncResult<V, E> : Promise<R>;
     }
+    return this.compile()(initialValue as V) as R extends AsyncResult<V, E> ? AsyncResult<V, E> : Promise<R>;
   }
 
   private async executeCompiledPipelineWithContext(value: V, context: C): Promise<{ result: Result<V, E>; context: C }> {

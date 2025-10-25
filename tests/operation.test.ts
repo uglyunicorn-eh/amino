@@ -504,6 +504,28 @@ describe('Operation Pipeline', () => {
       expect(result.res).toBe('processed');
     });
 
+    test('operation without initial context uses empty object', async () => {
+      const result = await operation(undefined, 42)
+        .step((value: number, context: any) => {
+          expect(context).toEqual({});
+          return ok(value * 2);
+        })
+        .complete();
+
+      expect(result.err).toBeUndefined();
+      expect(result.res).toBe(84);
+    });
+
+    test('compile works without initial context', async () => {
+      const compiledFn = operation(undefined, 10)
+        .step((value: number) => ok(value * 2))
+        .compile();
+
+      const result = await compiledFn(10);
+      expect(result.err).toBeUndefined();
+      expect(result.res).toBe(20);
+    });
+
     test('operation with empty arrays and objects', async () => {
       const result = await operation({}, [])
         .step((value: any[]) => ok(value.length))
