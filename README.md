@@ -56,6 +56,7 @@ Chain operations with fail-fast error handling, context management, and **high-p
 ```typescript
 import { operation, ok, err } from '@uglyunicorn/amino';
 
+// With context
 const result = await operation({ userId: 'user123', requestId: 'req456' }, 10)
   .step((value: number) => ok(value * 2))
   .step((value: number) => ok(value + 1))
@@ -63,6 +64,15 @@ const result = await operation({ userId: 'user123', requestId: 'req456' }, 10)
 
 if (result.err === undefined) {
   console.log(result.res); // 21
+}
+
+// Without context (uses empty object as default)
+const simpleResult = await operation(undefined, 10)
+  .step((value: number) => ok(value * 2))
+  .complete();
+
+if (simpleResult.err === undefined) {
+  console.log(simpleResult.res); // 20
 }
 ```
 
