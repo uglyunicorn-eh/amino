@@ -2,17 +2,18 @@ import { type Result, type AsyncResult, ok, err } from './result.ts';
 
 /**
  * Utility to check if a value is promise-like
+ * Optimized for performance: uses instanceof for native promises, duck-typing for custom ones
  */
 function isPromiseLike(value: unknown): value is Promise<unknown> {
-  return value != null && typeof value === 'object' && typeof (value as any).then === 'function';
+  // Fast path for native promises
+  if (value instanceof Promise) {
+    return true;
+  }
+  
+  // Duck-typing check for custom Promise-like objects
+  return value !== null && typeof value === 'object' && typeof (value as { then?: unknown }).then === 'function';
 }
 
-/**
- * Utility to handle both sync and async function results
- */
-async function awaitResult<T>(value: T | Promise<T>): Promise<T> {
-  return isPromiseLike(value) ? await value : value;
-}
 
 /**
  * Utility type for any Result or AsyncResult
@@ -60,13 +61,6 @@ export type PipelineFunction<V, NV, C, NC> = (context: C, value: V) => Promise<[
  */
 type ErrorTransformer<E> = (originalError: Error) => E;
 
-/**
- * Internal pipeline step representation as linked list node
- */
-type PipelineStep<V, NV, C, NC> = {
-  fn: PipelineFunction<V, NV, C, NC>;
-  next?: PipelineStep<any, any, any, any>;
-};
 
 /**
  * Type-safe Operation interface - chainable pipeline builder
@@ -106,6 +100,14 @@ export interface Operation<V, C, E extends Error = Error, R = AsyncResult<V, E>>
   failsWith(message: string): Operation<V, C, Error, R>;
 
   /**
+   * Compile the pipeline into an optimized function
+   * @param context - Optional context to bind (uses initial context if not provided)
+   * @returns Compiled function that only needs value
+   */
+  compile(): CompiledPipelineWithContext<V, E>;
+  compile(context: C): CompiledPipelineWithContext<V, E>;
+
+  /**
    * Execute the pipeline and return the final result
    * @returns AsyncResult with final value or error, or custom return type if handler provided
    */
@@ -113,15 +115,9 @@ export interface Operation<V, C, E extends Error = Error, R = AsyncResult<V, E>>
 }
 
 /**
- * Type-safe operation wrapper that explicitly defines the final result type
+ * Compiled pipeline function with context already bound
  */
-export interface TypedOperation<V, C, E extends Error = Error> {
-  step<NV>(fn: StepFunction<V, C, NV>): TypedOperation<NV, C, E>;
-  context<NC>(fn: ContextFunction<C, V, NC>): TypedOperation<V, NC, E>;
-  failsWith<NE extends Error>(errorClass: ErrorFactory<NE>, message: string): TypedOperation<V, C, NE>;
-  failsWith(message: string): TypedOperation<V, C, Error>;
-  complete(): AsyncResult<V, E>;
-}
+type CompiledPipelineWithContext<V, E extends Error = Error> = (value: V) => Promise<Result<V, E>>;
 
 /**
  * Completion handler signature - can be sync or async
@@ -132,11 +128,10 @@ export interface TypedOperation<V, C, E extends Error = Error> {
 export type CompletionHandler<V, C, E extends Error, R> = (result: Result<V, E>, context: C) => R | Promise<R>;
 
 /**
- * Internal operation state
+ * Internal operation state - simplified and mutable for performance
  */
 type OperationState<V, C, E extends Error = Error, R = AsyncResult<V, E>> = {
-  head?: PipelineStep<any, any, any, any>;
-  tail?: PipelineStep<any, any, any, any>;
+  steps: PipelineFunction<any, any, any, any>[];
   errorTransformer?: ErrorTransformer<E>;
   initialValue?: V;
   initialContext?: C;
@@ -144,159 +139,111 @@ type OperationState<V, C, E extends Error = Error, R = AsyncResult<V, E>> = {
 };
 
 /**
- * Internal operation implementation class with mutable state for lazy evaluation
+ * Internal operation implementation class with mutable state and compilation support
  */
 class OperationImpl<V, C, E extends Error = Error, R = AsyncResult<V, E>> implements Operation<V, C, E, R> {
   private state: OperationState<V, C, E, R>;
 
   constructor(state?: OperationState<V, C, E, R>) {
-    // Copy the state object to avoid external mutations
-    this.state = state ? { ...state } : {};
-  }
-
-  /**
-   * Appends a new node to the pipeline linked list in O(1) time using tail pointer
-   */
-  private appendToPipeline<V, NV, C, NC>(step: PipelineStep<V, NV, C, NC>): void {
-    if (this.state.tail) {
-      this.state.tail.next = step;
-    } else {
-      this.state.head = step;
-    }
-    this.state.tail = step;
+    // Simplified initialization - no copying, direct mutation for performance
+    this.state = state || { steps: [] };
   }
 
   step<NV>(fn: StepFunction<V, C, NV>): Operation<NV, C, E, R> {
-    const pipelineFn: PipelineFunction<V, NV, C, C> = async (context: C, value: V) => 
-      [context, await awaitResult(fn(value, context))];
-    
-    this.appendToPipeline({ fn: pipelineFn });
-    
+    this.state.steps.push(async (context: C, value: V) => {
+      const result = fn(value, context);
+      return [context, isPromiseLike(result) ? await result : result];
+    });
     return this as unknown as Operation<NV, C, E, R>;
   }
 
   context<NC>(fn: ContextFunction<C, V, NC>): Operation<V, NC, E, R> {
-    const pipelineFn: PipelineFunction<V, V, C, NC> = async (context: C, value: V) => 
-      [await awaitResult(fn(context, value)), ok(value)];
-    
-    this.appendToPipeline({ fn: pipelineFn });
-    
+    this.state.steps.push(async (context: C, value: V) => {
+      const newContext = fn(context, value);
+      return [isPromiseLike(newContext) ? await newContext : newContext, ok(value)];
+    });
     return this as unknown as Operation<V, NC, E, R>;
   }
 
   failsWith<NE extends Error>(errorClass: ErrorFactory<NE>, message: string): Operation<V, C, NE, R>;
   failsWith(message: string): Operation<V, C, Error, R>;
   failsWith<NE extends Error>(errorClassOrMessage: any, message?: string): Operation<V, C, NE, R> | Operation<V, C, Error, R> {
-    if (typeof errorClassOrMessage === 'string') {
-      this.state.errorTransformer = (originalError: Error) => 
-        new Error(errorClassOrMessage, { cause: originalError }) as E;
-    } else {
-      this.state.errorTransformer = (originalError: Error): E => 
-        new (errorClassOrMessage as ErrorFactory<NE>)(message!, { cause: originalError }) as unknown as E;
-    }
+    this.state.errorTransformer = typeof errorClassOrMessage === 'string'
+      ? (originalError: Error) => new Error(errorClassOrMessage, { cause: originalError }) as E
+      : (originalError: Error): E => new (errorClassOrMessage as ErrorFactory<NE>)(message!, { cause: originalError }) as unknown as E;
     
     return this as unknown as Operation<V, C, NE, R>;
   }
 
-  /**
-   * Creates a failure result using the configured error factory
-   */
   private failure(error: unknown): Result<V, E> {
-    const { errorTransformer } = this.state;
     const normalizedError = error instanceof Error ? error : new Error(String(error));
-    return err(errorTransformer ? errorTransformer(normalizedError) : normalizedError) as Result<V, E>;
+    return err(this.state.errorTransformer ? this.state.errorTransformer(normalizedError) : normalizedError) as Result<V, E>;
+  }
+
+  compile(): CompiledPipelineWithContext<V, E>;
+  compile(context: C): CompiledPipelineWithContext<V, E>;
+  compile(context?: C): CompiledPipelineWithContext<V, E> {
+    const boundContext = context ?? this.state.initialContext ?? ({} as C);
+    return (value: V): Promise<Result<V, E>> => this.executeCompiledPipeline(value, boundContext);
   }
 
   complete(): R extends AsyncResult<V, E> ? AsyncResult<V, E> : Promise<R> {
-    const { completeHandler } = this.state;
+    const { completeHandler, initialValue, initialContext } = this.state;
+    const context = initialContext || ({} as C);
+    
     if (completeHandler) {
-      return this.executePipeline().then(({ result, context }) => 
-        completeHandler(result, context as C)
-      ) as R extends AsyncResult<V, E> ? AsyncResult<V, E> : Promise<R>;
+      return this.executeCompiledPipelineWithContext(initialValue as V, context)
+        .then(({ result, context: finalContext }) => completeHandler(result, finalContext)) as R extends AsyncResult<V, E> ? AsyncResult<V, E> : Promise<R>;
     }
-    
-    return this.executePipeline().then(({ result }) => result) as R extends AsyncResult<V, E> ? AsyncResult<V, E> : Promise<R>;
+    return this.compile()(initialValue as V) as R extends AsyncResult<V, E> ? AsyncResult<V, E> : Promise<R>;
   }
 
-  /**
-   * Executes a single pipeline step and returns the result
-   */
-  private async executeStep(currentStep: PipelineStep<any, any, any, any>, currentContext: any, currentValue: any): Promise<{ newContext: any; newValue: any; error?: any }> {
-    const [newContext, result] = await currentStep.fn(currentContext, currentValue);
-    const { err: error, res } = result;
-    
-    if (error !== undefined) {
-      return { newContext: currentContext, newValue: currentValue, error };
-    }
-    
-    return { newContext, newValue: res };
-  }
-
-  private async executePipeline(): Promise<{ result: Result<V, E>; context: C }> {
-    const { initialValue, initialContext, head } = this.state;
-    
+  private async executeCompiledPipelineWithContext(value: V, context: C): Promise<{ result: Result<V, E>; context: C }> {
     try {
-      let currentValue: any = initialValue;
-      let currentContext: any = initialContext;
+      let currentValue: any = value;
+      let currentContext: any = context;
 
-      // Execute each step in sequence
-      let currentStep = head;
-      while (currentStep) {
-        const { newContext, newValue, error } = await this.executeStep(currentStep, currentContext, currentValue);
+      for (const step of this.state.steps) {
+        const [newContext, result] = await step(currentContext, currentValue);
+        const { err: error, res } = result;
         
         if (error !== undefined) {
-          return {
-            result: this.failure(error),
-            context: currentContext as C
-          };
+          return { result: this.failure(error), context: currentContext };
         }
         
         currentContext = newContext;
-        currentValue = newValue;
-        currentStep = currentStep.next;
+        currentValue = res;
       }
 
-      // All steps completed successfully
-      return {
-        result: ok(currentValue),
-        context: currentContext as C
-      };
+      return { result: ok(currentValue), context: currentContext };
     } catch (error) {
-      // Unexpected error during execution
-      return {
-        result: this.failure(error),
-        context: initialContext as C
-      };
+      return { result: this.failure(error), context };
     }
   }
+
+  private async executeCompiledPipeline(value: V, context: C): Promise<Result<V, E>> {
+    const { result } = await this.executeCompiledPipelineWithContext(value, context);
+    return result;
+  }
+
 }
 
-/**
- * Creates a new operation pipeline
- * @param initialContext - Optional initial context for the pipeline
- * @param initialValue - Optional initial value to start the pipeline with
- * @returns A new operation instance
- */
-export function operation<C = unknown, V = unknown>(initialContext?: C, initialValue?: V): TypedOperation<V, C, Error> {
+export function operation<C = unknown, V = unknown>(initialContext?: C, initialValue?: V): Operation<V, C, Error, AsyncResult<V, Error>> {
   return new OperationImpl<V, C, Error>({
+    steps: [],
     initialValue,
     initialContext,
-  }) as TypedOperation<V, C, Error>;
+  }) as Operation<V, C, Error, AsyncResult<V, Error>>;
 }
 
-/**
- * Creates a custom operation factory with a completion handler
- * @param completeHandler - Handler that receives result and context, returns custom type
- * @returns Factory function that creates operations with custom completion
- */
 export function makeOperation<C = unknown, E extends Error = Error, R = any>(
   completeHandler: CompletionHandler<any, C, E, R>
 ): <V = unknown>(initialContext?: C, initialValue?: V) => Operation<V, C, E, Promise<R>> {
-  return <V = unknown>(initialContext?: C, initialValue?: V) => {
-    return new OperationImpl<V, C, E, Promise<R>>({
+  return <V = unknown>(initialContext?: C, initialValue?: V) => 
+    new OperationImpl<V, C, E, Promise<R>>({
+      steps: [],
       initialValue,
       initialContext,
       completeHandler: async (result: Result<V, E>, context: C) => completeHandler(result, context),
     });
-  };
 }
