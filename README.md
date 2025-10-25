@@ -94,14 +94,14 @@ const result = await operation({ userId: 'user123' }, 5)
 
 ```typescript
 class ValidationError extends Error {
-  constructor(message: string, cause?: Error) {
-    super(message, { cause });
+  constructor(message: string, options?: { cause?: Error }) {
+    super(message, options);
   }
 }
 
-const result = await operation({ requestId: 'req123' })
+const result = await operation({ requestId: 'req123' }, 42)
   .failsWith(ValidationError, 'Validation failed')
-  .step((value: number) => err('Invalid input'))
+  .step((value: number) => err(new Error('Invalid input')))
   .complete();
 
 // result.err is ValidationError with cause chain
@@ -110,7 +110,7 @@ const result = await operation({ requestId: 'req123' })
 #### 4. Async Operations
 
 ```typescript
-const result = await operation({ sessionId: 'sess456' })
+const result = await operation({ sessionId: 'sess456' }, 5)
   .step((value: number) => ok(value * 2))        // sync
   .step(async (value: number) => ok(value + 1))  // async
   .step((value: number) => ok(value * 2))        // sync
@@ -122,7 +122,7 @@ const result = await operation({ sessionId: 'sess456' })
 TypeScript infers types throughout the chain:
 
 ```typescript
-const result = await operation({ traceId: 'trace789' })
+const result = await operation({ traceId: 'trace789' }, 42)
   .step((value: number) => ok(value.toString()))  // number -> string
   .step((value: string) => ok(value.length))      // string -> number
   .step((value: number) => ok(value > 0))         // number -> boolean
@@ -176,21 +176,22 @@ This enables seamless integration with any framework or custom return type requi
 
 - `ok<T>(value: T): Success<T>` - Create success result
 - `err(error: Error | string): Fail<Error>` - Create error result
-- `trycatch<T>(fn: () => T): Result<T>` - Wrap function in Result
+- `trycatch<T>(fn: () => T | Promise<T>): Result<T>` - Wrap function in Result
 
 ### Operation
 
 - `operation<C, V>(context?: C, value?: V)` - Create operation pipeline
-- `.step<NV>(fn: (value: V, context: C) => Result<NV>)` - Add processing step
-- `.context<NC>(fn: (context: C, value: V) => NC)` - Transform context
+- `.step<NV>(fn: (value: V, context: C) => Result<NV> | Promise<Result<NV>>)` - Add processing step
+- `.context<NC>(fn: (context: C, value: V) => NC | Promise<NC>)` - Transform context
 - `.failsWith<E>(ErrorClass, message)` - Set custom error type
+- `.failsWith(message)` - Set generic error type
 - `.complete()` - Execute pipeline and return Result (or custom type)
 
 ### makeOperation Factory
 
 - `makeOperation<C, E, R>(handler)` - Create operation factory with custom completion
 - Returns factory function: `(context?: C, value?: V) => Operation<V, C, E, Promise<R>>`
-- `handler`: `(result: Result<V, E>, context: C) => R` - Custom completion handler
+- `handler`: `(result: Result<V, E>, context: C) => R | Promise<R>` - Custom completion handler
 
 ## License
 
