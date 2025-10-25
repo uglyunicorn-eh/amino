@@ -4,15 +4,9 @@ import { type Result, type AsyncResult, ok, err } from './result.ts';
  * Utility to check if a value is promise-like
  */
 function isPromiseLike(value: unknown): value is Promise<unknown> {
-  return value != null && typeof value === 'object' && typeof (value as any).then === 'function';
+  return value != null && typeof value === 'object' && typeof (value as { then?: unknown }).then === 'function';
 }
 
-/**
- * Utility to handle both sync and async function results
- */
-async function awaitResult<T>(value: T | Promise<T>): Promise<T> {
-  return isPromiseLike(value) ? await value : value;
-}
 
 /**
  * Utility type for any Result or AsyncResult
@@ -167,20 +161,22 @@ class OperationImpl<V, C, E extends Error = Error, R = AsyncResult<V, E>> implem
   }
 
   step<NV>(fn: StepFunction<V, C, NV>): Operation<NV, C, E, R> {
-    const pipelineFn: PipelineFunction<V, NV, C, C> = async (context: C, value: V) => 
-      [context, await awaitResult(fn(value, context))];
+    const pipelineFn: PipelineFunction<V, NV, C, C> = async (context: C, value: V) => {
+      const result = fn(value, context);
+      return [context, isPromiseLike(result) ? await result : result];
+    };
     
     this.appendToPipeline({ fn: pipelineFn });
-    
     return this as unknown as Operation<NV, C, E, R>;
   }
 
   context<NC>(fn: ContextFunction<C, V, NC>): Operation<V, NC, E, R> {
-    const pipelineFn: PipelineFunction<V, V, C, NC> = async (context: C, value: V) => 
-      [await awaitResult(fn(context, value)), ok(value)];
+    const pipelineFn: PipelineFunction<V, V, C, NC> = async (context: C, value: V) => {
+      const newContext = fn(context, value);
+      return [isPromiseLike(newContext) ? await newContext : newContext, ok(value)];
+    };
     
     this.appendToPipeline({ fn: pipelineFn });
-    
     return this as unknown as Operation<V, NC, E, R>;
   }
 

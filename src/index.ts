@@ -7,3 +7,4 @@ export { trycatch } from './trycatch.ts';
 
 // Operation pipeline functions
 export { operation, makeOperation } from './operation.ts';
+export type { Operation, TypedOperation } from './operation.ts';
