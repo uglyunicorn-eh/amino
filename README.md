@@ -172,22 +172,6 @@ const result = await operation({ traceId: 'trace789' }, 42)
 // result.res is typed as boolean
 ```
 
-### Performance Characteristics
-
-The Operation Pipeline offers multiple performance tiers:
-
-| Approach | Performance | Use Case |
-|----------|-------------|----------|
-| **Regular Operation** | Baseline | Development, simple pipelines |
-| **Compiled Operation** | 54% faster | Production, single executions |
-| **Pre-compiled Pipeline** | 91% faster | High-throughput, batch processing |
-
-**Performance Tips:**
-- Use `compile()` for production code
-- Pre-compile pipelines for batch operations
-- Keep pipelines under 5 steps when possible
-- Use traditional Result chains for performance-critical paths
-
 ## Advanced Usage
 
 ### Custom Completion with `makeOperation`
@@ -227,38 +211,6 @@ The completion handler receives:
 
 This enables seamless integration with any framework or custom return type requirements.
 
-## Recent Optimizations
-
-Amino has been significantly optimized for production use:
-
-### Performance Improvements
-- **Compiled Pipelines**: 54-91% performance improvement over regular operations
-- **Mutable State**: Eliminated object copying overhead
-- **Array-based Execution**: Replaced linked list with efficient array traversal
-- **Pre-compilation**: Support for batch processing scenarios
-
-### Code Simplification
-- **21.9% code reduction** (338 → 264 lines)
-- **Eliminated duplicate types** and intermediate variables
-- **Streamlined execution** with minimal overhead
-- **Maintained 100% test coverage** and backward compatibility
-
-### When to Use Each Approach
-
-**Use Regular Operations for:**
-- Development and prototyping
-- Simple pipelines (1-3 steps)
-- One-off operations
-
-**Use Compiled Operations for:**
-- Production code
-- Performance-sensitive applications
-- Single executions with complex pipelines
-
-**Use Pre-compiled Pipelines for:**
-- High-throughput processing
-- Batch operations
-- Repeated executions with the same pipeline
 
 ## API
 
