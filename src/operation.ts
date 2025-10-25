@@ -11,11 +11,7 @@ function isPromiseLike(value: unknown): value is Promise<unknown> {
   }
   
   // Duck-typing check for custom Promise-like objects
-  return (
-    value !== null &&
-    typeof value === 'object' &&
-    typeof (value as { then?: unknown }).then === 'function'
-  );
+  return value !== null && typeof value === 'object' && typeof (value as { then?: unknown }).then === 'function';
 }
 
 
