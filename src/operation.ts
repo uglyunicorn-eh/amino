@@ -187,7 +187,7 @@ class OperationImpl<V, C, E extends Error = Error, R = AsyncResult<V, E>> implem
   compile(): CompiledPipelineWithContext<V, E>;
   compile(context: C): CompiledPipelineWithContext<V, E>;
   compile(context?: C): CompiledPipelineWithContext<V, E> {
-    const boundContext = context || this.state.initialContext || ({} as C);
+    const boundContext = context ?? this.state.initialContext ?? ({} as C);
     return (value: V): Promise<Result<V, E>> => this.executeCompiledPipeline(value, boundContext);
   }
 
