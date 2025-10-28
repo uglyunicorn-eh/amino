@@ -76,7 +76,7 @@ if (resultWithContext.err === undefined) {
   console.log(resultWithContext.res); // 21
 }
 
-// Without context (uses empty object as default)
+// Without context (uses undefined as default)
 const simpleResult = await operation(undefined, 10)
   .step((value: number) => ok(value * 2))
   .complete();

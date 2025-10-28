@@ -65,10 +65,10 @@ type ErrorTransformer<E> = (originalError: Error) => E;
 /**
  * Type-safe Operation interface - chainable pipeline builder
  * @param V - Final value type after all transformations
- * @param C - Final context type after all transformations
+ * @param C - Final context type after all transformations (default: undefined)
  * @param E - Error type (must extend Error)
  */
-export interface Operation<V, C, E extends Error = Error> {
+export interface Operation<V, C = undefined, E extends Error = Error> {
   /**
    * Add a processing step to the pipeline
    * @param fn - Step function that transforms the value
@@ -121,7 +121,7 @@ type CompiledPipelineWithContext<V, E extends Error = Error> = (value: V) => Pro
 /**
  * Internal operation state - simplified and mutable for performance
  */
-type OperationState<V, C, E extends Error = Error> = {
+type OperationState<V, C = undefined, E extends Error = Error> = {
   steps: PipelineFunction<any, any, any, any>[];
   errorTransformer?: ErrorTransformer<E>;
   initialValue?: V;
@@ -131,7 +131,7 @@ type OperationState<V, C, E extends Error = Error> = {
 /**
  * Internal operation implementation class with mutable state and compilation support
  */
-class OperationImpl<V, C, E extends Error = Error> implements Operation<V, C, E> {
+class OperationImpl<V, C = undefined, E extends Error = Error> implements Operation<V, C, E> {
   private state: OperationState<V, C, E>;
 
   constructor(state?: OperationState<V, C, E>) {
@@ -173,14 +173,13 @@ class OperationImpl<V, C, E extends Error = Error> implements Operation<V, C, E>
   compile(): CompiledPipelineWithContext<V, E>;
   compile(context: C): CompiledPipelineWithContext<V, E>;
   compile(context?: C): CompiledPipelineWithContext<V, E> {
-    const boundContext = context ?? this.state.initialContext ?? ({} as C);
+    const boundContext = (context ?? this.state.initialContext) as C;
     return (value: V): Promise<Result<V, E>> => this.executeCompiledPipeline(value, boundContext);
   }
 
   complete(): AsyncResult<V, E> {
     const { initialValue, initialContext } = this.state;
-    const context = initialContext || ({} as C);
-    return this.compile()(initialValue as V);
+    return this.compile(initialContext as C)(initialValue as V);
   }
 
   private async executeCompiledPipelineWithContext(value: V, context: C): Promise<{ result: Result<V, E>; context: C }> {
@@ -213,7 +212,7 @@ class OperationImpl<V, C, E extends Error = Error> implements Operation<V, C, E>
 
 }
 
-export function operation<C = unknown, V = unknown>(initialContext?: C, initialValue?: V): Operation<V, C, Error> {
+export function operation<V, C = undefined>(initialContext?: C, initialValue?: V): Operation<V, C, Error> {
   return new OperationImpl<V, C, Error>({
     steps: [],
     initialValue,

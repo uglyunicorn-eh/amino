@@ -60,7 +60,7 @@ describe('README Examples', () => {
       expect(resultWithContext.res).toBe(21);
     });
 
-    it('should work without context (uses empty object)', async () => {
+    it('should work without context (uses undefined)', async () => {
       const simpleResult = await operation(undefined, 10)
         .step((value: number) => ok(value * 2))
         .complete();
@@ -73,7 +73,7 @@ describe('README Examples', () => {
   describe('Performance Optimization with Compilation', () => {
     it('should compile operations without initial arguments', async () => {
       // Provide an initial value for type inference
-      const processNumber = operation(undefined, 0 as number)
+      const processNumber = operation<number>()
         .step((value: number) => ok(value * 2))
         .step((value: number) => ok(value + 1))
         .compile();

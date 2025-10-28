@@ -506,10 +506,10 @@ describe('Operation Pipeline', () => {
       expect(result.res).toBe('processed');
     });
 
-    test('operation without initial context uses empty object', async () => {
+    test('operation without initial context uses undefined', async () => {
       const result = await operation(undefined, 42)
         .step((value: number, context: any) => {
-          expect(context).toEqual({});
+          expect(context).toBeUndefined();
           return ok(value * 2);
         })
         .complete();
