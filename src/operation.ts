@@ -174,15 +174,18 @@ class OperationImpl<V, C = undefined, E extends Error = Error> implements Operat
   compile(context: C): CompiledPipelineWithContext<V, E>;
   compile(context?: C): CompiledPipelineWithContext<V, E> {
     const boundContext = (context ?? this.state.initialContext) as C;
-    return (value: V): Promise<Result<V, E>> => this.executeCompiledPipeline(value, boundContext);
+    return async (value: V): Promise<Result<V, E>> => {
+      const { result } = await this.executeCompiledPipeline(value, boundContext);
+      return result;
+    };
   }
 
   complete(): AsyncResult<V, E> {
-    const { initialValue, initialContext } = this.state;
-    return this.compile(initialContext as C)(initialValue as V);
+    const { initialValue } = this.state;
+    return this.compile()(initialValue as V);
   }
 
-  private async executeCompiledPipelineWithContext(value: V, context: C): Promise<{ result: Result<V, E>; context: C }> {
+  private async executeCompiledPipeline(value: V, context: C): Promise<{ result: Result<V, E>; context: C }> {
     try {
       let currentValue: any = value;
       let currentContext: any = context;
@@ -203,11 +206,6 @@ class OperationImpl<V, C = undefined, E extends Error = Error> implements Operat
     } catch (error) {
       return { result: this.failure(error), context };
     }
-  }
-
-  private async executeCompiledPipeline(value: V, context: C): Promise<Result<V, E>> {
-    const { result } = await this.executeCompiledPipelineWithContext(value, context);
-    return result;
   }
 
 }
