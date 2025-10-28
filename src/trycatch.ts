@@ -15,7 +15,7 @@ export function trycatch<T>(
   ? AsyncResult<U>
   : Result<T>;
 
-export function trycatch<T>(fn: () => T): Result<T> | AsyncResult<any> {
+export function trycatch<T>(fn: () => T): Result<T> | AsyncResult<T> {
   try {
     const result = fn();
     

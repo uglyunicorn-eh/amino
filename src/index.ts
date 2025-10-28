@@ -6,5 +6,5 @@ export type { Result, Success, Failure, AsyncResult } from './result.ts';
 export { trycatch } from './trycatch.ts';
 
 // Operation pipeline functions
-export { operation, makeOperation } from './operation.ts';
+export { operation } from './operation.ts';
 export type { Operation } from './operation.ts';
