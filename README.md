@@ -56,17 +56,27 @@ Chain operations with fail-fast error handling, context management, and **high-p
 ```typescript
 import { operation, ok, err } from '@uglyunicorn/amino';
 
-// With context
-const result = await operation({ userId: 'user123', requestId: 'req456' }, 10)
+// Simple operation with no initial context or value
+const result = await operation()
+  .step(() => ok(42))
+  .step((value: number) => ok(value * 2))
+  .complete();
+
+if (result.err === undefined) {
+  console.log(result.res); // 84
+}
+
+// With context and value
+const resultWithContext = await operation({ userId: 'user123', requestId: 'req456' }, 10)
   .step((value: number) => ok(value * 2))
   .step((value: number) => ok(value + 1))
   .complete();
 
-if (result.err === undefined) {
-  console.log(result.res); // 21
+if (resultWithContext.err === undefined) {
+  console.log(resultWithContext.res); // 21
 }
 
-// Without context (uses empty object as default)
+// Without context (uses undefined as default)
 const simpleResult = await operation(undefined, 10)
   .step((value: number) => ok(value * 2))
   .complete();
@@ -105,6 +115,17 @@ const compiledPipeline = operation(context, value)
 for (const user of users) {
   const result = await compiledPipeline(user);
 }
+
+// Compiling operations without initial arguments
+// For best type safety, provide an initial value to infer types:
+const processNumber = operation(undefined, 0)
+  .step((value: number) => ok(value * 2))
+  .step((value: number) => ok(value + 1))
+  .compile();
+
+// Use with different values
+const result1 = await processNumber(5);  // 11
+const result2 = await processNumber(10); // 21
 ```
 
 ### Key Features
@@ -172,46 +193,6 @@ const result = await operation({ traceId: 'trace789' }, 42)
 // result.res is typed as boolean
 ```
 
-## Advanced Usage
-
-### Custom Completion with `makeOperation`
-
-Create operation factories with custom completion handlers for framework integrations:
-
-```typescript
-import { makeOperation, ok, err, type Result } from '@uglyunicorn/amino';
-
-// Example: Hono framework integration
-interface HonoContext {
-  json: (data: any, status?: number) => Response;
-}
-
-const honoOperation = makeOperation(
-  (result: Result<any>, context: { honoCtx: HonoContext }) => {
-    if (result.err !== undefined) {
-      return context.honoCtx.json({ error: result.err.message }, 500);
-    }
-    return context.honoCtx.json(result.res);
-  }
-);
-
-// Use in a Hono route handler
-app.get('/users/:id', async (c) => {
-  return await honoOperation({ honoCtx: c }, undefined)
-    .step(() => validateUserId(c.req.param('id')))
-    .step((userId: string) => fetchUser(userId))
-    .step((user: User) => enrichUserData(user))
-    .complete(); // Returns Hono Response directly
-});
-```
-
-The completion handler receives:
-- `result`: The final `Result<V, E>` from the pipeline
-- `context`: The final operation context (after all `.context()` transformations)
-
-This enables seamless integration with any framework or custom return type requirements.
-
-
 ## API
 
 ### Result Functions
@@ -229,13 +210,7 @@ This enables seamless integration with any framework or custom return type requi
 - `.failsWith(message)` - Set generic error type
 - `.compile()` - Compile pipeline for optimal performance (54-91% faster)
 - `.compile(context)` - Compile pipeline with explicit context binding
-- `.complete()` - Execute pipeline and return Result (or custom type)
-
-### makeOperation Factory
-
-- `makeOperation<C, E, R>(handler)` - Create operation factory with custom completion
-- Returns factory function: `(context?: C, value?: V) => Operation<V, C, E, Promise<R>>`
-- `handler`: `(result: Result<V, E>, context: C) => R | Promise<R>` - Custom completion handler
+- `.complete()` - Execute pipeline and return AsyncResult<V, E>
 
 ## License
 

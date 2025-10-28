@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { operation, makeOperation } from '../src/operation.ts';
+import { operation } from '../src/operation.ts';
 import { ok, err, type Result } from '../src/result.ts';
 import { trycatch } from '../src/trycatch.ts';
 
@@ -491,6 +491,7 @@ describe('Operation Pipeline', () => {
         .complete();
 
       expect(result.err).toBeUndefined();
+      // result.res should be typed as number (length of data array)
       expect(result.res).toBe(2);
     });
 
@@ -501,13 +502,14 @@ describe('Operation Pipeline', () => {
         .complete();
 
       expect(result.err).toBeUndefined();
+      // result.res should be typed as string
       expect(result.res).toBe('processed');
     });
 
-    test('operation without initial context uses empty object', async () => {
+    test('operation without initial context uses undefined', async () => {
       const result = await operation(undefined, 42)
         .step((value: number, context: any) => {
-          expect(context).toEqual({});
+          expect(context).toBeUndefined();
           return ok(value * 2);
         })
         .complete();
@@ -534,6 +536,7 @@ describe('Operation Pipeline', () => {
         .complete();
 
       expect(result.err).toBeUndefined();
+      // result.res should be typed as boolean
       expect(result.res).toBe(true);
     });
 
@@ -719,255 +722,5 @@ describe('Operation Pipeline', () => {
       expect(result.err).toBeUndefined();
       expect(result.res).toBe(84); // 42 * 2
     });
-  });
-});
-
-describe('makeOperation Factory', () => {
-  test('creates a factory that returns operations', () => {
-    const factory = makeOperation((result: Result<any>) => result);
-    expect(typeof factory).toBe('function');
-    
-    const op = factory('context', 10);
-    expect(op).toBeDefined();
-    expect(typeof op.step).toBe('function');
-    expect(typeof op.context).toBe('function');
-    expect(typeof op.complete).toBe('function');
-  });
-
-  test('custom completion handler is called with result and context', async () => {
-    let capturedResult: Result<any> | undefined;
-    let capturedContext: any;
-    
-    const factory = makeOperation((result: Result<any>, context: any) => {
-      capturedResult = result;
-      capturedContext = context;
-      return { custom: true, result };
-    });
-
-    const result = await factory({ test: 'context' }, 10)
-      .step((value: number) => ok(value * 2))
-      .complete();
-
-    expect(capturedResult).toBeDefined();
-    expect(capturedResult?.err).toBeUndefined();
-    expect(capturedResult?.res).toBe(20);
-    expect(capturedContext).toEqual({ test: 'context' });
-    expect(result.custom).toBe(true);
-    expect(result.result).toBeDefined();
-  });
-
-  test('handler return type is preserved', async () => {
-    const factory = makeOperation((result: Result<number>) => {
-      if (result.err !== undefined) {
-        return { success: false, error: result.err.message };
-      }
-      return { success: true, value: result.res };
-    });
-
-    const result = await factory('ctx', 5)
-      .step((value: number) => ok(value * 3))
-      .complete();
-
-    expect(result).toEqual({ success: true, value: 15 });
-  });
-
-  test('handler receives error result on failure', async () => {
-    const factory = makeOperation((result: Result<any>) => {
-      if (result.err !== undefined) {
-        return { error: result.err.message };
-      }
-      return { value: result.res };
-    });
-
-    const result = await factory('ctx', 10)
-      .step((value: number) => err('Something failed'))
-      .complete();
-
-    expect(result).toEqual({ error: 'Something failed' });
-  });
-
-  test('works with Hono-like context structure', async () => {
-    interface HonoContext {
-      json: (data: any, status?: number) => { body: any; status: number };
-    }
-
-    const honoFactory = makeOperation((result: Result<any>, context: { honoCtx: HonoContext }) => {
-      if (result.err !== undefined) {
-        return context.honoCtx.json({ error: result.err.message }, 500);
-      }
-      return context.honoCtx.json(result.res);
-    });
-
-    const mockHonoCtx: HonoContext = {
-      json: (data, status = 200) => ({ body: data, status })
-    };
-
-    const result = await honoFactory({ honoCtx: mockHonoCtx }, 42)
-      .step((value: number) => ok(value * 2))
-      .complete();
-
-    expect(result).toEqual({ body: 84, status: 200 });
-  });
-
-  test('works with Hono-like context on error', async () => {
-    interface HonoContext {
-      json: (data: any, status?: number) => { body: any; status: number };
-    }
-
-    const honoFactory = makeOperation((result: Result<any>, context: { honoCtx: HonoContext }) => {
-      if (result.err !== undefined) {
-        return context.honoCtx.json({ error: result.err.message }, 500);
-      }
-      return context.honoCtx.json(result.res);
-    });
-
-    const mockHonoCtx: HonoContext = {
-      json: (data, status = 200) => ({ body: data, status })
-    };
-
-    const result = await honoFactory({ honoCtx: mockHonoCtx }, 42)
-      .step((value: number) => err('Failed'))
-      .complete();
-
-    expect(result).toEqual({ body: { error: 'Failed' }, status: 500 });
-  });
-
-  test('chaining still works with makeOperation', async () => {
-    interface TestContext {
-      value: string;
-    }
-
-    const factory = makeOperation((result: Result<any>, context: TestContext) => {
-      if (result.err !== undefined) return { error: true };
-      return { value: result.res, context: context.value };
-    });
-
-    const result = await factory({ value: 'initial' }, 5)
-      .step((value: number) => ok(value * 2))
-      .context((ctx: TestContext, value: number) => ({ value: `${ctx.value}-${value}` }))
-      .step((value: number) => ok(value + 1))
-      .complete();
-
-    expect(result.value).toBe(11);
-    expect(result.context).toBe('initial-10');
-  });
-
-  test('failsWith works with makeOperation', async () => {
-    class CustomError extends Error {
-      constructor(message: string, options?: { cause?: Error }) {
-        super(message, options);
-      }
-    }
-
-    const factory = makeOperation((result: Result<any, CustomError>) => {
-      if (result.err !== undefined) {
-        return { errorType: result.err.constructor.name, message: result.err.message };
-      }
-      return { value: result.res };
-    });
-
-    const result = await factory('ctx', 10)
-      .failsWith(CustomError, 'Custom error occurred')
-      .step((value: number) => err('Internal error'))
-      .complete();
-
-    expect(result).toEqual({ 
-      errorType: 'CustomError', 
-      message: 'Custom error occurred' 
-    });
-  });
-
-  test('context is accessible in handler', async () => {
-    interface AppContext {
-      userId: string;
-      requestId: string;
-    }
-
-    const factory = makeOperation((result: Result<any>, context: AppContext) => {
-      return {
-        userId: context.userId,
-        requestId: context.requestId,
-        result: result.err === undefined ? result.res : null,
-        error: result.err?.message
-      };
-    });
-
-    const result = await factory({ userId: 'user123', requestId: 'req456' }, 100)
-      .step((value: number) => ok(value / 2))
-      .complete();
-
-    expect(result).toEqual({
-      userId: 'user123',
-      requestId: 'req456',
-      result: 50,
-      error: undefined
-    });
-  });
-
-  test('factory with no initial values', async () => {
-    const factory = makeOperation((result: Result<any>) => {
-      if (result.err !== undefined) return { error: true };
-      return { value: result.res };
-    });
-
-    const result = await factory()
-      .step(() => ok(42))
-      .complete();
-
-    expect(result).toEqual({ value: 42 });
-  });
-
-  test('async steps work with custom handler', async () => {
-    const factory = makeOperation((result: Result<any>) => {
-      if (result.err !== undefined) return { error: true };
-      return { value: result.res };
-    });
-
-    const result = await factory('ctx', 5)
-      .step(async (value: number) => ok(value * 2))
-      .step((value: number) => ok(value + 10))
-      .step(async (value: number) => ok(value * 3))
-      .complete();
-
-    expect(result).toEqual({ value: 60 }); // ((5 * 2) + 10) * 3
-  });
-
-  test('context updates are visible in handler', async () => {
-    const factory = makeOperation((result: Result<any>, context: any) => {
-      return {
-        finalContext: context,
-        result: result.err === undefined ? result.res : null
-      };
-    });
-
-    const result = await factory('initial', 10)
-      .step((value: number) => ok(value * 2))
-      .context((ctx: string, value: number) => `${ctx}-step1-${value}`)
-      .step((value: number) => ok(value + 5))
-      .context((ctx: string, value: number) => `${ctx}-step2-${value}`)
-      .complete();
-
-    expect(result).toEqual({
-      finalContext: 'initial-step1-20-step2-25',
-      result: 25
-    });
-  });
-
-  test('factory creates independent operations', async () => {
-    const factory = makeOperation((result: Result<any>) => {
-      if (result.err !== undefined) return { error: true };
-      return { value: result.res };
-    });
-
-    const result1 = await factory('ctx1', 10)
-      .step((value: number) => ok(value * 2))
-      .complete();
-
-    const result2 = await factory('ctx2', 20)
-      .step((value: number) => ok(value * 3))
-      .complete();
-
-    expect(result1).toEqual({ value: 20 });
-    expect(result2).toEqual({ value: 60 });
   });
 });
