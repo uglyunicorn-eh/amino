@@ -72,6 +72,100 @@ describe('Acid Extensions', () => {
       // Verify that step was added and operation is valid
       expect(result).toBeDefined();
     });
+
+    test('acid operation with async context factory', async () => {
+      const factory = makeOperation<number, { value: number }>(
+        async (num) => ({ value: num * 2 })
+      )
+        .action('getValue', async ({ value }, { res, err }: Result<any>) => {
+          return { contextValue: value, resultValue: res };
+        });
+
+      const op = await factory(21);
+      
+      // Verify operation is created successfully with async context
+      expect(op).toBeDefined();
+      expect(typeof op.step).toBe('function');
+      expect(typeof op.complete).toBe('function');
+      expect(typeof (op as any).getValue).toBe('function');
+    });
+
+    test('acid operation handles operation with no steps', async () => {
+      let capturedValue: any;
+      
+      const factory = makeOperation<number, { num: number }>(
+        (num) => ({ num })
+      )
+        .action('handle', async ({ num }, { res, err }) => {
+          capturedValue = num;
+          return 'processed';
+        });
+
+      const op = factory(5);
+      
+      // Call the action (which will complete with no steps)
+      const result = await (op as any).handle();
+      
+      expect(result).toBe('processed');
+      expect(capturedValue).toBe(5);
+    });
+
+    test('acid operation executes with multiple chained steps', async () => {
+      const factory = makeOperation<string, { prefix: string }>(
+        (str) => ({ prefix: str })
+      )
+        .action('execute', async (ctx, result) => {
+          return { ctx, result };
+        });
+
+      const op = factory('test');
+      const result = await op
+        .step((value: any) => ok(value + '1'))
+        .step((value: string) => ok(value + '2'));
+
+      expect(result).toBeDefined();
+      expect(typeof (result as any).execute).toBe('function');
+    });
+
+    test('acid operation action executes when called directly without steps', async () => {
+      const factory = makeOperation<number, { count: number }>(
+        (num) => ({ count: num })
+      )
+        .action('finalize', async (ctx, result) => {
+          return { ctxValue: ctx.count, resultOk: result.res !== undefined };
+        });
+
+      const op = factory(100);
+      
+      // Call action directly without any steps
+      const result = await (op as any).finalize();
+      
+      expect(result).toBeDefined();
+      expect(result.ctxValue).toBe(100);
+      expect(result.resultOk).toBe(false); // no result since no steps executed
+    });
+
+    test('acid operation with context that gets transformed through steps', async () => {
+      const factory = makeOperation<number, { value: number }>(
+        (num) => ({ value: num })
+      )
+        .action('total', async (ctx, result) => {
+          return ctx.value + (result.res || 0);
+        });
+
+      const op = factory(10);
+      
+      const result = await op
+        .step((value: any) => ok(5))
+        .context((ctx, value) => ({ value: ctx.value * 2 }));
+      
+      expect(result).toBeDefined();
+      expect(typeof (result as any).total).toBe('function');
+      
+      // Execute the action to test context propagation
+      const total = await (result as any).total();
+      expect(total).toBeGreaterThan(0);
+    });
   });
 
   describe('Hono Acid', () => {
