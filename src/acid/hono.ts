@@ -10,14 +10,7 @@ export interface Context {
 }
 
 /**
- * Operation context for Hono acid - wraps Hono's Context
- */
-export interface HonoOperationContext {
-  ctx: Context;
-}
-
-/**
- * Create Hono acid factory function
+ * Create Hono extension factory
  * Usage:
  * ```ts
  * import { func } from '@uglyunicorn/amino/acid/hono'
@@ -28,10 +21,10 @@ export interface HonoOperationContext {
  *     .response())
  * ```
  */
-export const func = makeOperation<Context, HonoOperationContext>(
+export const func = makeOperation<Context, { ctx: Context }>(
   (ctx: Context) => ({ ctx })
 )
-  .action('response', async ({ ctx }: HonoOperationContext, { res, err }: Result<any>) => {
+  .action('response', async ({ ctx }, { res, err }: Result<any>) => {
     if (err) {
       return ctx.json({ status: 'error', error: err.message }, 400);
     }

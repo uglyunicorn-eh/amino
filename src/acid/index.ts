@@ -1,3 +1,3 @@
-// Export all acids from this directory
-export { func, type HonoOperationContext, type Context } from './hono.ts';
+// Export all extensions from this directory
+export { func, type Context } from './hono.ts';
 
