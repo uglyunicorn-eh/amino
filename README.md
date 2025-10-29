@@ -193,6 +193,81 @@ const result = await operation({ traceId: 'trace789' }, 42)
 // result.res is typed as boolean
 ```
 
+## Extensions
+
+Create framework-specific extensions with custom action methods. Extensions wrap operations with additional functionality.
+
+### Creating Custom Extensions
+
+Use `makeOperation()` to create extensions with custom actions:
+
+```typescript
+import { makeOperation } from '@uglyunicorn/amino';
+
+interface MyContext {
+  userId: string;
+  sessionId: string;
+}
+
+const myOperation = makeOperation<ContextArg, MyContext>(
+  (arg) => ({ userId: 'user123', sessionId: 'sess456' })
+)
+  .action('finalize', async (ctx, { res, err }) => {
+    if (err) {
+      return { error: err.message, ctx };
+    }
+    return { data: res, ctx };
+  });
+
+// Use the extension
+const result = await myOperation(contextArg)
+  .step(() => ok({ data: 'example' }))
+  .finalize();
+```
+
+### Hono Extension
+
+Pre-built extension for Hono.js that adds `.response()` action for automatic JSON responses:
+
+```typescript
+import { Hono } from 'hono';
+import { func } from '@uglyunicorn/amino/acid/hono';
+import { ok, err } from '@uglyunicorn/amino';
+
+const app = new Hono();
+
+// Success response (200)
+app.post('/api/users', async (c) => {
+  return await func(c)
+    .step(() => ok({ id: 1, name: 'John' }))
+    .response();
+});
+
+// Error response (400)
+app.post('/api/users/error', async (c) => {
+  return await func(c)
+    .step(() => err('Invalid input'))
+    .response();
+});
+
+// Multiple steps with validation
+app.post('/api/data', async (c) => {
+  return await func(c)
+    .step(() => {
+      const input = c.req.valid('json');
+      if (!input) return err('Missing body');
+      return ok(input);
+    })
+    .step((data) => ok({ ...data, processed: true }))
+    .response();
+});
+```
+
+The `.response()` action automatically:
+- Sends JSON with `{ status: 'ok', response: data }` for success (200)
+- Sends JSON with `{ status: 'error', error: message }` for errors (400)
+- Maintains type safety throughout the chain
+
 ## API
 
 ### Result Functions
@@ -211,6 +286,12 @@ const result = await operation({ traceId: 'trace789' }, 42)
 - `.compile()` - Compile pipeline for optimal performance (54-91% faster)
 - `.compile(context)` - Compile pipeline with explicit context binding
 - `.complete()` - Execute pipeline and return AsyncResult<V, E>
+
+### Extensions
+
+- `makeOperation<CtxArg, Ctx>(contextFactory)` - Create custom extension factory
+- `.action(name, handler)` - Register custom action method
+- Extensions can have custom action methods (e.g., `.response()`)
 
 ## License
 
