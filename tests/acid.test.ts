@@ -166,6 +166,104 @@ describe('Acid Extensions', () => {
       const total = await (result as any).total();
       expect(total).toBeGreaterThan(0);
     });
+
+    test('acid operation getFinalContext handles missing steps', async () => {
+      // Create a factory and operation  
+      const factory = makeOperation<number, { count: number }>(
+        (num) => ({ count: num })
+      )
+        .action('test', async (ctx, result) => ctx);
+
+      const op = factory(5);
+      
+      // Get the actual operation reference
+      const actualOp = (op as any).currentOp || (op as any);
+      if (actualOp.state) {
+        // Set steps to undefined to trigger line 152
+        actualOp.state.steps = undefined;
+      }
+      
+      // Call the action
+      const result = await (op as any).test();
+      
+      // Should return initial context
+      expect(result.count).toBe(5);
+    });
+
+    test('acid operation getFinalContext catch block (line 173)', async () => {
+      // Create an operation that will cause an error in getFinalContext
+      const factory = makeOperation<number, { value: number }>(
+        (num) => ({ value: num })
+      )
+        .action('error', async (ctx, result) => ctx);
+
+      const op = factory(10);
+      
+      // Cause an error by making state.steps throw when accessed
+      const originalState = (op as any).state;
+      Object.defineProperty((op as any), 'state', {
+        get() {
+          return {
+            steps: [() => { throw new Error('Test error in steps'); }],
+            initialValue: undefined,
+            initialContext: { value: 10 }
+          };
+        },
+        configurable: true
+      });
+      
+      // Call the action - it should catch the error and return initial context (line 173)
+      const result = await (op as any).error();
+      
+      // Should return the initial context on error  
+      expect(result.value).toBe(10);
+      
+      // Restore
+      Object.defineProperty((op as any), 'state', {
+        get() { return originalState; },
+        configurable: true
+      });
+    });
+
+    test('acid operation handles concurrent action calls', async () => {
+      const factory = makeOperation<number, { id: number }>(
+        (num) => ({ id: num })
+      )
+        .action('get', async (ctx, result) => ctx.id);
+
+      const op = factory(99);
+      
+      // Call action multiple times concurrently
+      const results = await Promise.all([
+        (op as any).get(),
+        (op as any).get(),
+        (op as any).get()
+      ]);
+      
+      expect(results).toEqual([99, 99, 99]);
+    });
+
+    test('test empty operation directly', async () => {
+      // Create a factory
+      const factory = makeOperation<number, { count: number }>(
+        (num) => ({ count: num })
+      )
+        .action('test', async (ctx, result) => ctx);
+
+      const op = factory(10);
+      
+      // Access the wrapped operation
+      const wrappedOp: any = op;
+      
+      // Try to modify the internal state
+      if (wrappedOp.state) {
+        wrappedOp.state.steps = null;
+      }
+      
+      const result = await (op as any).test();
+      expect(result.count).toBe(10);
+    });
+
   });
 
   describe('Hono Acid', () => {

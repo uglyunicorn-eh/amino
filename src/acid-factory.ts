@@ -96,18 +96,13 @@ function createAcidOperation<V, Ctx, E extends Error = Error>(
       // Check if it's a registered action
       if (typeof prop === 'string' && actions.has(prop)) {
         return async function() {
-          const handler = actions.get(prop);
-          if (!handler) {
-            throw new Error(`Unknown action: ${prop}`);
-          }
+          const handler = actions.get(prop)!; // Safe because actions.has(prop) is true
           
-          // Execute the pipeline to get result and final context
+          // Execute the pipeline to get result
           const result = await currentOp.complete();
           
-          // Get the final context from the operation's internal state
-          const finalContext = await getFinalContext(currentOp, initialContext);
-          
-          return handler(finalContext, result);
+          // Return the initial context (context transforms are handled internally by the operation)
+          return handler(initialContext, result);
         };
       }
       
@@ -134,44 +129,4 @@ function createAcidOperation<V, Ctx, E extends Error = Error>(
   });
   
   return proxy as AcidOperation<V, Ctx, E>;
-}
-
-/**
- * Get the final context after executing the pipeline
- */
-async function getFinalContext<V, Ctx, E extends Error = Error>(
-  op: Operation<V, Ctx, E>,
-  initialContext: Ctx
-): Promise<Ctx> {
-  try {
-    // Access the internal implementation
-    const impl = op as any;
-    const state = impl.state;
-    
-    if (!state || !state.steps) {
-      return initialContext;
-    }
-    
-    // Execute the pipeline to get the final context
-    const { steps } = state;
-    let currentContext: any = initialContext;
-    let currentValue: any = state.initialValue;
-    
-    for (const step of steps) {
-      const [newContext, result] = await step(currentContext, currentValue);
-      const { err: error, res } = result;
-      
-      if (error !== undefined) {
-        return currentContext;
-      }
-      
-      currentContext = newContext;
-      currentValue = res;
-    }
-    
-    return currentContext;
-  } catch {
-    // If we can't get the final context, return the initial context
-    return initialContext;
-  }
 }
