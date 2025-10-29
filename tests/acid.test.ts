@@ -4,21 +4,20 @@ import { ok, type Result } from '../src/result.ts';
 
 describe('Extension System', () => {
   describe('makeOperation', () => {
-    test('creates an extension factory with action', () => {
-      const factory = makeOperation<string, { value: string }>(
+    test('creates an extension builder with action', () => {
+      const builder = makeOperation<string, { value: string }>(
         (arg) => ({ value: arg })
       );
 
-      expect(typeof factory).toBe('function');
-      expect(typeof factory.action).toBe('function');
+      expect(typeof builder).toBe('object');
+      expect(typeof builder.action).toBe('function');
     });
 
-    test('can register multiple actions', () => {
+    test('can register single action and get factory', () => {
       const factory = makeOperation<number, { num: number }>(
         (num) => ({ num })
       )
-        .action('test1', () => 'result1')
-        .action('test2', () => 'result2');
+        .action('test', () => 'result');
 
       expect(typeof factory).toBe('function');
     });
@@ -38,12 +37,12 @@ describe('Extension System', () => {
       expect(typeof op.complete).toBe('function');
     });
 
-    test('extension operation can chain steps', () => {
+    test('extension operation can chain steps', async () => {
       const factory = makeOperation<number, { count: number }>(
         (num) => ({ count: num })
-      );
+      ).action('execute', async (ctx, result) => ctx);
 
-      const op = factory(5);
+      const op = await factory(5);
       const chained = op.step((value: any) => ok(value + 1));
 
       expect(chained).toBeDefined();

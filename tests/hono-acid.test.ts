@@ -7,8 +7,8 @@ describe('Hono Extension', () => {
     expect(typeof func).toBe('function');
   });
 
-  test('func factory has action method', () => {
-    expect(typeof func.action).toBe('function');
+  test('func is callable factory', () => {
+    expect(typeof func).toBe('function');
   });
 
   test('creates operation with Hono context', () => {

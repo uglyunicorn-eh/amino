@@ -10,116 +10,81 @@ import { type Result } from './result.ts';
 export type ActionHandler<C, V, R> = (context: C, result: Result<V, Error>) => R | Promise<R>;
 
 /**
- * Registry of action handlers by name
+ * Extension operation interface - Operation with a single action method
  */
-type ActionRegistry = Map<string, ActionHandler<any, any, any>>;
+export type ExtensionOperation<V, Ctx, ActionName extends string, ActionResult, E extends Error = Error> = 
+  Operation<V, Ctx, E> & {
+    [K in ActionName]: () => Promise<ActionResult>;
+  };
 
 /**
- * Acid operation interface - Operation with dynamic action methods
+ * Extension builder interface - allows registering ONE action
  */
-export interface AcidOperation<V, Ctx, E extends Error = Error> extends Operation<V, Ctx, E> {
-  // Dynamic methods will be added via Proxy
-}
-
-/**
- * Acid builder interface - allows registering actions
- */
-export interface AcidBuilder<CtxArg, Ctx> {
+export interface ExtensionBuilder<CtxArg, Ctx> {
   /**
-   * Register an action handler
-   * @param name - Action name (becomes a method name on the acid operation)
+   * Register a single action handler
+   * @param name - Action name (becomes a method name on the extension)
    * @param handler - Handler function that receives context and result
-   * @returns Factory function for creating acid operations with registered actions
+   * @returns Factory function for creating extension operations
    */
   action<ActionName extends string, ResultType>(
     name: ActionName,
     handler: ActionHandler<Ctx, any, ResultType>
-  ): AcidBuilder<CtxArg, Ctx>;
-  
-  /**
-   * Call the factory with a context argument
-   */
-  (arg: CtxArg): AcidOperation<any, Ctx, Error>;
+  ): (arg: CtxArg) => ExtensionOperation<any, Ctx, ActionName, ResultType, Error> | Promise<ExtensionOperation<any, Ctx, ActionName, ResultType, Error>>;
 }
 
 /**
- * Factory function for creating extensible operations (acids)
+ * Factory function for creating extensions with a single action
  * @param contextFactory - Function that creates context from arguments
- * @returns Factory function that can register actions and create acid operations
+ * @returns Builder that allows registering one action
  */
 export function makeOperation<CtxArg, Ctx>(
   contextFactory: (arg: CtxArg) => Ctx | Promise<Ctx>
-): AcidBuilder<CtxArg, Ctx> {
-  const actions: ActionRegistry = new Map();
-  
-  // Create the callable factory function
-  const factory = function(arg: CtxArg): AcidOperation<any, Ctx, Error> {
-    const ctx = contextFactory(arg);
-    
-    if (ctx instanceof Promise) {
-      return ctx.then(resolvedCtx => createAcidOperation(resolvedCtx, actions)) as any;
+): ExtensionBuilder<CtxArg, Ctx> {
+  // Return builder with action method
+  const builder: ExtensionBuilder<CtxArg, Ctx> = {
+    action<ActionName extends string, ResultType>(
+      name: ActionName,
+      handler: ActionHandler<Ctx, any, ResultType>
+    ): (arg: CtxArg) => ExtensionOperation<any, Ctx, ActionName, ResultType, Error> | Promise<ExtensionOperation<any, Ctx, ActionName, ResultType, Error>> {
+      // Return factory that creates extension operations
+      return (arg: CtxArg): ExtensionOperation<any, Ctx, ActionName, ResultType, Error> | Promise<ExtensionOperation<any, Ctx, ActionName, ResultType, Error>> => {
+        const ctx = contextFactory(arg);
+        
+        if (ctx instanceof Promise) {
+          return ctx.then(resolvedCtx => createExtensionOperation(resolvedCtx, name, handler));
+        }
+        
+        return createExtensionOperation(ctx, name, handler);
+      };
     }
-    
-    return createAcidOperation(ctx, actions);
   };
   
-  // Add the builder methods
-  factory.action = function<ActionName extends string, ResultType>(
-    name: ActionName,
-    handler: ActionHandler<Ctx, any, ResultType>
-  ): AcidBuilder<CtxArg, Ctx> {
-    actions.set(name, handler);
-    return factory as any as AcidBuilder<CtxArg, Ctx>;
-  };
-  
-  return factory as any as AcidBuilder<CtxArg, Ctx>;
+  return builder;
 }
 
 /**
- * Create an acid operation with the given context and registered actions
+ * Create an extension operation with a single action
+ * Uses property assignment instead of Proxy for simplicity
  */
-function createAcidOperation<V, Ctx, E extends Error = Error>(
+function createExtensionOperation<V, Ctx, ActionName extends string, ActionResult>(
   initialContext: Ctx,
-  actions: ActionRegistry
-): AcidOperation<V, Ctx, E> {
-  let currentOp: Operation<any, Ctx, any> = operation<V, Ctx>(initialContext, undefined);
+  actionName: ActionName,
+  handler: ActionHandler<Ctx, any, ActionResult>
+): ExtensionOperation<V, Ctx, ActionName, ActionResult, Error> {
+  // Create base operation
+  const baseOp = operation<V, Ctx>(initialContext, undefined);
   
-  const proxy = new Proxy({} as any, {
-    get(target, prop) {
-      // Check if it's a registered action
-      if (typeof prop === 'string' && actions.has(prop)) {
-        return async function() {
-          const handler = actions.get(prop)!; // Safe because actions.has(prop) is true
-          
-          // Execute the pipeline to get result
-          const result = await currentOp.complete();
-          
-          // Return the initial context (context transforms are handled internally by the operation)
-          return handler(initialContext, result);
-        };
-      }
-      
-      // Special handling for chaining methods
-      if (prop === 'step' || prop === 'context' || prop === 'failsWith') {
-        return function(...args: any[]): any {
-          const method = Reflect.get(currentOp, prop);
-          const result = (method as any).apply(currentOp, args);
-          currentOp = result as Operation<any, Ctx, any>;
-          return proxy;
-        };
-      }
-      
-      // Delegate to current operation
-      const value = Reflect.get(currentOp, prop);
-      
-      // If it's a method, bind it properly
-      if (typeof value === 'function') {
-        return value.bind(currentOp);
-      }
-      
-      return value;
-    }
+  // Add the action method via property assignment
+  Object.defineProperty(baseOp, actionName, {
+    value: async function() {
+      const result = await baseOp.complete();
+      return handler(initialContext, result);
+    },
+    writable: false,
+    enumerable: true,
+    configurable: false
   });
   
-  return proxy as AcidOperation<V, Ctx, E>;
+  return baseOp as ExtensionOperation<V, Ctx, ActionName, ActionResult, Error>;
 }

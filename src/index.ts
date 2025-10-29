@@ -9,9 +9,9 @@ export { trycatch } from './trycatch.ts';
 export { operation } from './operation.ts';
 export type { Operation } from './operation.ts';
 
-// Acid extensions system
+// Extension system
 export { makeOperation } from './acid-factory.ts';
-export type { ActionHandler, AcidOperation } from './acid-factory.ts';
+export type { ActionHandler, ExtensionOperation } from './acid-factory.ts';
 
 // Pre-built acids
 export * from './acid/index.ts';
