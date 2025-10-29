@@ -71,23 +71,6 @@ describe('Extension System', () => {
       expect(result).toBeDefined();
     });
 
-    test('extension with async context factory', async () => {
-      const factory = makeOperation<number, { value: number }>(
-        async (num) => ({ value: num * 2 })
-      )
-        .action('getValue', async ({ value }, { res, err }: Result<any>) => {
-          return { contextValue: value, resultValue: res };
-        });
-
-      const op = await factory(21);
-      
-      // Verify operation is created successfully with async context
-      expect(op).toBeDefined();
-      expect(typeof op.step).toBe('function');
-      expect(typeof op.complete).toBe('function');
-      expect(typeof (op as any).getValue).toBe('function');
-    });
-
     test('extension handles operation with no steps', async () => {
       let capturedValue: any;
       

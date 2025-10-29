@@ -30,31 +30,26 @@ export interface ExtensionBuilder<CtxArg, Ctx> {
   action<ActionName extends string, ResultType>(
     name: ActionName,
     handler: ActionHandler<Ctx, any, ResultType>
-  ): (arg: CtxArg) => ExtensionOperation<any, Ctx, ActionName, ResultType, Error> | Promise<ExtensionOperation<any, Ctx, ActionName, ResultType, Error>>;
+  ): (arg: CtxArg) => ExtensionOperation<any, Ctx, ActionName, ResultType, Error>;
 }
 
 /**
  * Factory function for creating extensions with a single action
- * @param contextFactory - Function that creates context from arguments
+ * @param contextFactory - Function that creates context from arguments (must be synchronous)
  * @returns Builder that allows registering one action
  */
 export function makeOperation<CtxArg, Ctx>(
-  contextFactory: (arg: CtxArg) => Ctx | Promise<Ctx>
+  contextFactory: (arg: CtxArg) => Ctx
 ): ExtensionBuilder<CtxArg, Ctx> {
   // Return builder with action method
   const builder: ExtensionBuilder<CtxArg, Ctx> = {
     action<ActionName extends string, ResultType>(
       name: ActionName,
       handler: ActionHandler<Ctx, any, ResultType>
-    ): (arg: CtxArg) => ExtensionOperation<any, Ctx, ActionName, ResultType, Error> | Promise<ExtensionOperation<any, Ctx, ActionName, ResultType, Error>> {
+    ): (arg: CtxArg) => ExtensionOperation<any, Ctx, ActionName, ResultType, Error> {
       // Return factory that creates extension operations
-      return (arg: CtxArg): ExtensionOperation<any, Ctx, ActionName, ResultType, Error> | Promise<ExtensionOperation<any, Ctx, ActionName, ResultType, Error>> => {
+      return (arg: CtxArg): ExtensionOperation<any, Ctx, ActionName, ResultType, Error> => {
         const ctx = contextFactory(arg);
-        
-        if (ctx instanceof Promise) {
-          return ctx.then(resolvedCtx => createExtensionOperation(resolvedCtx, name, handler));
-        }
-        
         return createExtensionOperation(ctx, name, handler);
       };
     }
