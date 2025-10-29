@@ -199,40 +199,12 @@ Create framework-specific extensions with custom action methods. Extensions wrap
 
 ### Creating Custom Extensions
 
-Use `makeOperation()` to create extensions with custom actions:
+Use `makeOperation()` to create extensions with custom actions. Here's how the Hono extension is built:
 
 ```typescript
 import { makeOperation } from '@uglyunicorn/amino';
 
-interface MyContext {
-  userId: string;
-  sessionId: string;
-}
-
-const myOperation = makeOperation<ContextArg, MyContext>(
-  (arg) => ({ userId: 'user123', sessionId: 'sess456' })
-)
-  .action('finalize', async (ctx, { res, err }) => {
-    if (err) {
-      return { error: err.message, ctx };
-    }
-    return { data: res, ctx };
-  });
-
-// Use the extension
-const result = await myOperation(contextArg)
-  .step(() => ok({ data: 'example' }))
-  .finalize();
-```
-
-### Hono Extension Example
-
-The Hono extension is built using `makeOperation()`:
-
-```typescript
-import { makeOperation } from '@uglyunicorn/amino';
-
-// Creating the Hono extension
+// Create a custom extension for Hono
 export const func = makeOperation((ctx: Context) => ({ ctx }))
   .action('response', async ({ ctx }, { res, err }) => {
     if (err) {
@@ -242,12 +214,31 @@ export const func = makeOperation((ctx: Context) => ({ ctx }))
   });
 ```
 
-**Usage in your Hono application:**
+**Or create your own extension:**
+
+```typescript
+interface MyContext {
+  userId: string;
+  timestamp: Date;
+}
+
+const myExtension = makeOperation<InputArg, MyContext>(
+  (arg) => ({ userId: arg.id, timestamp: new Date() })
+)
+  .action('finalize', async (ctx, { res, err }) => {
+    if (err) return { error: err.message, ctx };
+    return { data: res, ctx };
+  });
+```
+
+### Using Extensions
+
+Extensions can be used in your application:
 
 ```typescript
 import { Hono } from 'hono';
 import { func } from '@uglyunicorn/amino/acid/hono';
-import { ok, err } from '@uglyunicorn/amino';
+import { ok } from '@uglyunicorn/amino';
 
 const app = new Hono();
 
@@ -258,7 +249,7 @@ app.post('/api/users', async (c) => {
 });
 ```
 
-The `.response()` action automatically sends JSON with proper status codes (200 for success, 400 for errors).
+The `.response()` action automatically sends JSON with proper status codes.
 
 ## API
 
