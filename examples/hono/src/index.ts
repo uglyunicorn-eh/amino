@@ -7,7 +7,7 @@ import { ok, err } from '@uglyunicorn/amino';
 // Create Hono app
 const app = new Hono();
 
-// Example endpoint using Hono acid
+// Example endpoint using Hono extension
 app.post('/api/users', async (c: Context) => {
   return await func(c)
     .step(() => {

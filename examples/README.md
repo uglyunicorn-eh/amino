@@ -6,7 +6,7 @@ This directory contains example projects demonstrating various use cases of Amin
 
 ### Hono Integration (`hono/`)
 
-Demonstrates how to use Amino's Hono acid extension to build REST APIs with:
+Demonstrates how to use Amino's Hono extension to build REST APIs with:
 - Type-safe error handling
 - Clean response formatting
 - Multiple step transformations

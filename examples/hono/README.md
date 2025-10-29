@@ -1,10 +1,10 @@
-# Hono Acid Example
+# Hono Extension Example
 
-This example demonstrates using Amino's Hono acid extension to build a simple REST API with Hono.
+This example demonstrates using Amino's Hono extension to build a simple REST API with Hono.
 
 ## Features
 
-- Hono integration with Amino acids
+- Hono integration with Amino extensions
 - Type-safe error handling with Result pattern
 - Clean API responses (200 for success, 400 for errors)
 - Multiple step transformations
@@ -77,7 +77,7 @@ curl http://localhost:3000/api/health
 
 ## How It Works
 
-The Hono acid extension provides a `.response()` action that:
+The Hono extension provides a `.response()` action that:
 - Executes the operation pipeline
 - Sends JSON response with proper status codes
 - Handles both success (200) and error (400) cases
@@ -98,6 +98,6 @@ app.post('/api/example', async (c: Context) => {
 
 This pattern allows you to:
 1. Define your business logic in steps
-2. Let the acid handle response formatting
+2. Let the extension handle response formatting
 3. Maintain type safety and error handling throughout
 

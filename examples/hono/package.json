@@ -1,7 +1,7 @@
 {
-  "name": "hono- acid-example",
+  "name": "hono-extension-example",
   "version": "1.0.0",
-  "description": "Example Hono app using Amino acid extensions",
+  "description": "Example Hono app using Amino extensions",
   "type": "module",
   "scripts": {
     "dev": "bun run src/index.ts"

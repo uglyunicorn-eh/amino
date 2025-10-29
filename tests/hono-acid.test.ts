@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { func } from '../src/acid/hono.ts';
 import { ok, err } from '../src/result.ts';
 
-describe('Hono Acid', () => {
+describe('Hono Extension', () => {
   test('exports func factory', () => {
     expect(typeof func).toBe('function');
   });

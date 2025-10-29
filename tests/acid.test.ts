@@ -2,9 +2,9 @@ import { describe, expect, test } from 'bun:test';
 import { makeOperation } from '../src/acid-factory.ts';
 import { ok, err, type Result } from '../src/result.ts';
 
-describe('Acid Extensions', () => {
+describe('Extension System', () => {
   describe('makeOperation', () => {
-    test('creates an acid factory with action', () => {
+    test('creates an extension factory with action', () => {
       const factory = makeOperation<string, { value: string }>(
         (arg) => ({ value: arg })
       );
@@ -23,7 +23,7 @@ describe('Acid Extensions', () => {
       expect(typeof factory).toBe('function');
     });
 
-    test('creates acid operation with context', async () => {
+    test('creates extension operation with context', async () => {
       const factory = makeOperation<string, { ctx: string }>(
         (arg) => ({ ctx: arg })
       )
@@ -38,7 +38,7 @@ describe('Acid Extensions', () => {
       expect(typeof op.complete).toBe('function');
     });
 
-    test('acid operation can chain steps', () => {
+    test('extension operation can chain steps', () => {
       const factory = makeOperation<number, { count: number }>(
         (num) => ({ count: num })
       );
@@ -50,7 +50,7 @@ describe('Acid Extensions', () => {
       expect(typeof chained.step).toBe('function');
     });
 
-    test('acid operation executes action with correct context and result', async () => {
+    test('extension operation executes action with correct context and result', async () => {
       interface TestContext {
         id: number;
       }
@@ -72,7 +72,7 @@ describe('Acid Extensions', () => {
       expect(result).toBeDefined();
     });
 
-    test('acid operation with async context factory', async () => {
+    test('extension with async context factory', async () => {
       const factory = makeOperation<number, { value: number }>(
         async (num) => ({ value: num * 2 })
       )
@@ -89,7 +89,7 @@ describe('Acid Extensions', () => {
       expect(typeof (op as any).getValue).toBe('function');
     });
 
-    test('acid operation handles operation with no steps', async () => {
+    test('extension handles operation with no steps', async () => {
       let capturedValue: any;
       
       const factory = makeOperation<number, { num: number }>(
@@ -109,7 +109,7 @@ describe('Acid Extensions', () => {
       expect(capturedValue).toBe(5);
     });
 
-    test('acid operation executes with multiple chained steps', async () => {
+    test('extension executes with multiple chained steps', async () => {
       const factory = makeOperation<string, { prefix: string }>(
         (str) => ({ prefix: str })
       )
@@ -126,7 +126,7 @@ describe('Acid Extensions', () => {
       expect(typeof (result as any).execute).toBe('function');
     });
 
-    test('acid operation action executes when called directly without steps', async () => {
+    test('extension action executes when called directly without steps', async () => {
       const factory = makeOperation<number, { count: number }>(
         (num) => ({ count: num })
       )
@@ -144,7 +144,7 @@ describe('Acid Extensions', () => {
       expect(result.resultOk).toBe(false); // no result since no steps executed
     });
 
-    test('acid operation with context that gets transformed through steps', async () => {
+    test('extension with context transformation through steps', async () => {
       const factory = makeOperation<number, { value: number }>(
         (num) => ({ value: num })
       )
@@ -166,7 +166,7 @@ describe('Acid Extensions', () => {
       expect(total).toBeGreaterThan(0);
     });
 
-    test('acid operation getFinalContext handles missing steps', async () => {
+    test('extension handles missing steps', async () => {
       // Create a factory and operation  
       const factory = makeOperation<number, { count: number }>(
         (num) => ({ count: num })
@@ -189,7 +189,7 @@ describe('Acid Extensions', () => {
       expect(result.count).toBe(5);
     });
 
-    test('acid operation getFinalContext catch block (line 173)', async () => {
+    test('extension error handling', async () => {
       // Create an operation that will cause an error in getFinalContext
       const factory = makeOperation<number, { value: number }>(
         (num) => ({ value: num })
@@ -224,7 +224,7 @@ describe('Acid Extensions', () => {
       });
     });
 
-    test('acid operation handles concurrent action calls', async () => {
+    test('extension handles concurrent action calls', async () => {
       const factory = makeOperation<number, { id: number }>(
         (num) => ({ id: num })
       )
@@ -242,7 +242,7 @@ describe('Acid Extensions', () => {
       expect(results).toEqual([99, 99, 99]);
     });
 
-    test('test empty operation directly', async () => {
+    test('handles empty operation directly', async () => {
       // Create a factory
       const factory = makeOperation<number, { count: number }>(
         (num) => ({ count: num })
