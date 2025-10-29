@@ -1,5 +1,5 @@
 import { makeOperation } from '../acid-factory.ts';
-import { type Result, ok } from '../result.ts';
+import { type Result } from '../result.ts';
 
 /**
  * Hono Context type (users must install @hono/node-server or similar)

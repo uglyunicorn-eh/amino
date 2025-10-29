@@ -15,13 +15,6 @@ export type ActionHandler<C, V, R> = (context: C, result: Result<V, Error>) => R
 type ActionRegistry = Map<string, ActionHandler<any, any, any>>;
 
 /**
- * Acid operation factory signature
- * @param contextArg - Argument to the context factory
- * @returns Acid operation with registered actions
- */
-export type AcidFactory<CtxArg, Ctx> = AcidBuilder<CtxArg, Ctx>;
-
-/**
  * Acid operation interface - Operation with dynamic action methods
  */
 export interface AcidOperation<V, Ctx, E extends Error = Error> extends Operation<V, Ctx, E> {
