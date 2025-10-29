@@ -12,3 +12,6 @@ export type { Operation } from './operation.ts';
 // Acid extensions system
 export { makeOperation } from './acid-factory.ts';
 export type { ActionHandler, AcidOperation } from './acid-factory.ts';
+
+// Pre-built acids
+export * from './acid/index.ts';
