@@ -225,9 +225,24 @@ const result = await myOperation(contextArg)
   .finalize();
 ```
 
-### Hono Extension
+### Hono Extension Example
 
-Pre-built extension for Hono.js that adds `.response()` action for automatic JSON responses:
+The Hono extension is built using `makeOperation()`:
+
+```typescript
+import { makeOperation } from '@uglyunicorn/amino';
+
+// Creating the Hono extension
+export const func = makeOperation((ctx: Context) => ({ ctx }))
+  .action('response', async ({ ctx }, { res, err }) => {
+    if (err) {
+      return ctx.json({ status: 'error', error: err.message }, 400);
+    }
+    return ctx.json({ status: 'ok', response: res }, 200);
+  });
+```
+
+**Usage in your Hono application:**
 
 ```typescript
 import { Hono } from 'hono';
@@ -236,37 +251,14 @@ import { ok, err } from '@uglyunicorn/amino';
 
 const app = new Hono();
 
-// Success response (200)
 app.post('/api/users', async (c) => {
   return await func(c)
     .step(() => ok({ id: 1, name: 'John' }))
     .response();
 });
-
-// Error response (400)
-app.post('/api/users/error', async (c) => {
-  return await func(c)
-    .step(() => err('Invalid input'))
-    .response();
-});
-
-// Multiple steps with validation
-app.post('/api/data', async (c) => {
-  return await func(c)
-    .step(() => {
-      const input = c.req.valid('json');
-      if (!input) return err('Missing body');
-      return ok(input);
-    })
-    .step((data) => ok({ ...data, processed: true }))
-    .response();
-});
 ```
 
-The `.response()` action automatically:
-- Sends JSON with `{ status: 'ok', response: data }` for success (200)
-- Sends JSON with `{ status: 'error', error: message }` for errors (400)
-- Maintains type safety throughout the chain
+The `.response()` action automatically sends JSON with proper status codes (200 for success, 400 for errors).
 
 ## API
 
