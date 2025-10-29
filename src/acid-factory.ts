@@ -19,7 +19,7 @@ type ActionRegistry = Map<string, ActionHandler<any, any, any>>;
  * @param contextArg - Argument to the context factory
  * @returns Acid operation with registered actions
  */
-export type AcidFactory<CtxArg, Ctx> = ((arg: CtxArg) => AcidOperation<any, Ctx, Error>) & AcidBuilder<Ctx>;
+export type AcidFactory<CtxArg, Ctx> = AcidBuilder<CtxArg, Ctx>;
 
 /**
  * Acid operation interface - Operation with dynamic action methods
@@ -31,7 +31,7 @@ export interface AcidOperation<V, Ctx, E extends Error = Error> extends Operatio
 /**
  * Acid builder interface - allows registering actions
  */
-export interface AcidBuilder<Ctx> {
+export interface AcidBuilder<CtxArg, Ctx> {
   /**
    * Register an action handler
    * @param name - Action name (becomes a method name on the acid operation)
@@ -41,7 +41,12 @@ export interface AcidBuilder<Ctx> {
   action<ActionName extends string, ResultType>(
     name: ActionName,
     handler: ActionHandler<Ctx, any, ResultType>
-  ): AcidBuilder<Ctx>;
+  ): AcidBuilder<CtxArg, Ctx>;
+  
+  /**
+   * Call the factory with a context argument
+   */
+  (arg: CtxArg): AcidOperation<any, Ctx, Error>;
 }
 
 /**
@@ -51,7 +56,7 @@ export interface AcidBuilder<Ctx> {
  */
 export function makeOperation<CtxArg, Ctx>(
   contextFactory: (arg: CtxArg) => Ctx | Promise<Ctx>
-): AcidBuilder<Ctx> {
+): AcidBuilder<CtxArg, Ctx> {
   const actions: ActionRegistry = new Map();
   
   // Create the callable factory function
@@ -69,12 +74,12 @@ export function makeOperation<CtxArg, Ctx>(
   factory.action = function<ActionName extends string, ResultType>(
     name: ActionName,
     handler: ActionHandler<Ctx, any, ResultType>
-  ): AcidBuilder<Ctx> {
+  ): AcidBuilder<CtxArg, Ctx> {
     actions.set(name, handler);
-    return factory as any as AcidBuilder<Ctx>;
+    return factory as any as AcidBuilder<CtxArg, Ctx>;
   };
   
-  return factory as any as AcidBuilder<Ctx>;
+  return factory as any as AcidBuilder<CtxArg, Ctx>;
 }
 
 /**
