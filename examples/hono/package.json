@@ -1,0 +1,19 @@
+{
+  "name": "hono-extension-example",
+  "version": "1.0.0",
+  "description": "Example Hono app using Amino extensions",
+  "type": "module",
+  "scripts": {
+    "dev": "bun run src/index.ts"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.12.1",
+    "hono": "^4.6.0",
+    "@uglyunicorn/amino": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.9.3"
+  }
+}
+

@@ -193,6 +193,64 @@ const result = await operation({ traceId: 'trace789' }, 42)
 // result.res is typed as boolean
 ```
 
+## Extensions
+
+Create framework-specific extensions with custom action methods. Extensions wrap operations with additional functionality.
+
+### Creating Custom Extensions
+
+Use `makeOperation()` to create extensions with custom actions. Here's how the Hono extension is built:
+
+```typescript
+import { makeOperation } from '@uglyunicorn/amino';
+
+// Create a custom extension for Hono
+export const func = makeOperation((ctx: Context) => ({ ctx }))
+  .action('response', async ({ ctx }, { res, err }) => {
+    if (err) {
+      return ctx.json({ status: 'error', error: err.message }, 400);
+    }
+    return ctx.json({ status: 'ok', response: res }, 200);
+  });
+```
+
+**Or create your own extension:**
+
+```typescript
+interface MyContext {
+  userId: string;
+  timestamp: Date;
+}
+
+const myExtension = makeOperation<InputArg, MyContext>(
+  (arg) => ({ userId: arg.id, timestamp: new Date() })
+)
+  .action('finalize', async (ctx, { res, err }) => {
+    if (err) return { error: err.message, ctx };
+    return { data: res, ctx };
+  });
+```
+
+### Using Extensions
+
+Extensions can be used in your application:
+
+```typescript
+import { Hono } from 'hono';
+import { func } from '@uglyunicorn/amino/acid/hono';
+import { ok } from '@uglyunicorn/amino';
+
+const app = new Hono();
+
+app.post('/api/users', async (c) => {
+  return await func(c)
+    .step(() => ok({ id: 1, name: 'John' }))
+    .response();
+});
+```
+
+The `.response()` action automatically sends JSON with proper status codes.
+
 ## API
 
 ### Result Functions
@@ -211,6 +269,12 @@ const result = await operation({ traceId: 'trace789' }, 42)
 - `.compile()` - Compile pipeline for optimal performance (54-91% faster)
 - `.compile(context)` - Compile pipeline with explicit context binding
 - `.complete()` - Execute pipeline and return AsyncResult<V, E>
+
+### Extensions
+
+- `makeOperation<CtxArg, Ctx>(contextFactory)` - Create custom extension factory
+- `.action(name, handler)` - Register custom action method
+- Extensions can have custom action methods (e.g., `.response()`)
 
 ## License
 
