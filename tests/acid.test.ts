@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { makeOperation, type ExtensionOperation } from '../src/acid-factory.ts';
+import { makeOperation, type ExtensionOperation } from '../src/acids/index.ts';
 import { ok, err, type Result } from '../src/result.ts';
 
 describe('Extension System', () => {

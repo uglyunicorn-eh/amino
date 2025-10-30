@@ -1,5 +1,5 @@
-import { type Operation, type ErrorFactory, operation } from './operation.ts';
-import { type Result } from './result.ts';
+import { type Operation, type ErrorFactory, operation } from '../operation.ts';
+import { type Result } from '../result.ts';
 
 /**
  * Action handler signature - called when an action method is invoked
@@ -129,3 +129,4 @@ function createExtensionOperation<V, Ctx, ActionName extends string, ActionResul
   
   return baseOp as ExtensionOperation<V, Ctx, ActionName, ActionResult, Error>;
 }
+

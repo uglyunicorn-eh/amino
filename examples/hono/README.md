@@ -86,7 +86,7 @@ The Hono extension provides a `.response()` action that:
 ## Code Example
 
 ```typescript
-import { func } from '@uglyunicorn/amino/acid/hono';
+import { func } from '@uglyunicorn/amino/acids/hono';
 import { ok } from '@uglyunicorn/amino';
 
 app.post('/api/example', async (c: Context) => {

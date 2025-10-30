@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { serve } from '@hono/node-server';
-import { func } from '@uglyunicorn/amino/acid/hono';
+import { func } from '@uglyunicorn/amino/acids/hono';
 import { Context } from 'hono';
 import { ok, err } from '@uglyunicorn/amino';
 

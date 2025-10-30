@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import { func } from '../src/acid/hono.ts';
-import { ok, err } from '../src/result.ts';
-import type { Context } from '../src/acid/hono.ts';
+import { func } from './index.ts';
+import { ok, err } from '../../result.ts';
+import type { Context } from './index.ts';
 
 interface MockJsonResponse {
   obj: unknown;

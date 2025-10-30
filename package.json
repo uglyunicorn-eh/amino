@@ -28,6 +28,14 @@
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
+    },
+    "./acids": {
+      "import": "./dist/acids/index.js",
+      "types": "./dist/acids/index.d.ts"
+    },
+    "./acids/hono": {
+      "import": "./dist/acids/hono/index.js",
+      "types": "./dist/acids/hono/index.d.ts"
     }
   },
   "files": [
@@ -36,7 +44,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "bun build src/index.ts --outdir dist --target node && bun run build:types",
+    "build": "bun build src/index.ts --outdir dist --target node && bun build src/acids/index.ts --outdir dist/acids --target node && bun build src/acids/hono/index.ts --outdir dist/acids/hono --target node && bun run build:types",
     "build:types": "tsc --project tsconfig.build.json",
     "test": "bun test",
     "test:coverage": "bun test --coverage",
