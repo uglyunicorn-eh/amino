@@ -30,4 +30,3 @@ jobs:
           fail_ci_if_error: true
           token: ${{ secrets.CODECOV_TOKEN }}
           slug: uglyunicorn-eh/amino
-          verbose: true
