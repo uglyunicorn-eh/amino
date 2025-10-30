@@ -20,6 +20,9 @@
     "url": "https://github.com/uglyunicorn-eh/amino/issues"
   },
   "homepage": "https://github.com/uglyunicorn-eh/amino#readme",
+  "workspaces": [
+    "examples/*"
+  ],
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
