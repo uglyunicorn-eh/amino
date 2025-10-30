@@ -1,6 +1,6 @@
 {
   "name": "@uglyunicorn/amino",
-  "version": "0.99.9",
+  "version": "0.99.10",
   "description": "A lightweight, type-safe Result pattern implementation for TypeScript",
   "keywords": [
     "result",
@@ -39,6 +39,16 @@
     "./acids/hono": {
       "import": "./dist/acids/hono/index.js",
       "types": "./dist/acids/hono/index.d.ts"
+    }
+  },
+  "typesVersions": {
+    "*": {
+      "acids": [
+        "dist/acids/index.d.ts"
+      ],
+      "acids/hono": [
+        "dist/acids/hono/index.d.ts"
+      ]
     }
   },
   "files": [
