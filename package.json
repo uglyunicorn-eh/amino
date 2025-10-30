@@ -41,6 +41,16 @@
       "types": "./dist/acids/hono/index.d.ts"
     }
   },
+  "typesVersions": {
+    "*": {
+      "acids": [
+        "dist/acids/index.d.ts"
+      ],
+      "acids/hono": [
+        "dist/acids/hono/index.d.ts"
+      ]
+    }
+  },
   "files": [
     "dist",
     "README.md",
