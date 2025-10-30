@@ -65,9 +65,7 @@ describe('Hono Extension', () => {
     
     expect(response).toBeDefined();
     expect(capturedStatus).toBe(200);
-    if (capturedObj && typeof capturedObj === 'object' && 'status' in capturedObj) {
-      expect(capturedObj.status).toBe('ok');
-    }
+    expect(capturedObj).toEqual({ hello: 'world' });
   });
 
   test('response action handles error result correctly', async () => {
@@ -89,9 +87,7 @@ describe('Hono Extension', () => {
     
     expect(response).toBeDefined();
     expect(capturedStatus).toBe(400);
-    if (capturedObj && typeof capturedObj === 'object' && 'status' in capturedObj) {
-      expect(capturedObj.status).toBe('error');
-    }
+    expect(capturedObj).toEqual({ error: 'Test error' });
   });
 });
 
