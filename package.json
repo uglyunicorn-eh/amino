@@ -1,6 +1,6 @@
 {
   "name": "@uglyunicorn/amino",
-  "version": "0.99.8",
+  "version": "0.99.9",
   "description": "A lightweight, type-safe Result pattern implementation for TypeScript",
   "keywords": [
     "result",
@@ -20,6 +20,9 @@
     "url": "https://github.com/uglyunicorn-eh/amino/issues"
   },
   "homepage": "https://github.com/uglyunicorn-eh/amino#readme",
+  "workspaces": [
+    "examples/*"
+  ],
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -28,6 +31,14 @@
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
+    },
+    "./acids": {
+      "import": "./dist/acids/index.js",
+      "types": "./dist/acids/index.d.ts"
+    },
+    "./acids/hono": {
+      "import": "./dist/acids/hono/index.js",
+      "types": "./dist/acids/hono/index.d.ts"
     }
   },
   "files": [
@@ -36,14 +47,23 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "bun build src/index.ts --outdir dist --target node && bun run build:types",
+    "build": "bun run scripts/build.ts && bun run build:types",
     "build:types": "tsc --project tsconfig.build.json",
     "test": "bun test",
     "test:coverage": "bun test --coverage",
     "prepublishOnly": "bun run test && bun run build"
   },
+  "peerDependencies": {
+    "hono": "latest"
+  },
+  "peerDependenciesMeta": {
+    "hono": {
+      "optional": true
+    }
+  },
   "devDependencies": {
     "@types/bun": "latest",
+    "hono": "latest",
     "typescript": "^5.9.3"
   },
   "publishConfig": {

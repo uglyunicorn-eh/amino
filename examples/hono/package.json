@@ -3,13 +3,14 @@
   "version": "1.0.0",
   "description": "Example Hono app using Amino extensions",
   "type": "module",
+  "private": true,
   "scripts": {
     "dev": "bun run src/index.ts"
   },
   "dependencies": {
-    "@hono/node-server": "^1.12.1",
-    "hono": "^4.6.0",
-    "@uglyunicorn/amino": "workspace:*"
+    "@hono/node-server": "latest",
+    "hono": "latest",
+    "@uglyunicorn/amino": "file:../../"
   },
   "devDependencies": {
     "@types/bun": "latest",
