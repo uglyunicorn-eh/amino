@@ -1,12 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { func } from './index.ts';
 import { ok, err } from '../../result.ts';
-import type { Context } from './index.ts';
-
-interface MockJsonResponse {
-  obj: unknown;
-  status?: number;
-}
+import type { Context } from 'hono';
 
 describe('Hono Extension', () => {
   test('exports func factory', () => {
@@ -18,9 +13,9 @@ describe('Hono Extension', () => {
   });
 
   test('creates operation with Hono context', () => {
-    const mockContext: Context = {
-      json: (obj: unknown, status?: number): MockJsonResponse => ({ obj, status }),
-    };
+    const mockContext = {
+      json: (obj: unknown, status?: number) => new Response(JSON.stringify(obj), { status }),
+    } as Context;
 
     const op = func(mockContext);
     expect(op).toBeDefined();
@@ -29,9 +24,9 @@ describe('Hono Extension', () => {
   });
 
   test('can chain steps on Hono operation', () => {
-    const mockContext: Context = {
-      json: (obj: unknown, status?: number): MockJsonResponse => ({ obj, status }),
-    };
+    const mockContext = {
+      json: (obj: unknown, status?: number) => new Response(JSON.stringify(obj), { status }),
+    } as Context;
 
     const op = func(mockContext);
     const chained = op.step(() => ok({ hello: 'world' }));
@@ -41,9 +36,9 @@ describe('Hono Extension', () => {
   });
 
   test('response action exists and is callable', () => {
-    const mockContext: Context = {
-      json: (obj: unknown, status?: number): MockJsonResponse => ({ obj, status }),
-    };
+    const mockContext = {
+      json: (obj: unknown, status?: number) => new Response(JSON.stringify(obj), { status }),
+    } as Context;
 
     const op = func(mockContext);
     
@@ -55,13 +50,13 @@ describe('Hono Extension', () => {
     let capturedObj: unknown;
     let capturedStatus: number | undefined;
     
-    const mockContext: Context = {
-      json: (obj: unknown, status?: number): Promise<MockJsonResponse> => {
+    const mockContext = {
+      json: (obj: unknown, status?: number) => {
         capturedObj = obj;
         capturedStatus = status;
-        return Promise.resolve({ obj, status });
+        return new Response(JSON.stringify(obj), { status });
       },
-    };
+    } as Context;
 
     const op = func(mockContext);
     const result = op.step(() => ok({ hello: 'world' }));
@@ -79,13 +74,13 @@ describe('Hono Extension', () => {
     let capturedObj: unknown;
     let capturedStatus: number | undefined;
     
-    const mockContext: Context = {
-      json: (obj: unknown, status?: number): Promise<MockJsonResponse> => {
+    const mockContext = {
+      json: (obj: unknown, status?: number) => {
         capturedObj = obj;
         capturedStatus = status;
-        return Promise.resolve({ obj, status });
+        return new Response(JSON.stringify(obj), { status });
       },
-    };
+    } as Context;
 
     const op = func(mockContext);
     const result = op.step(() => err('Test error'));
