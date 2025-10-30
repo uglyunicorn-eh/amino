@@ -1,13 +1,6 @@
 import { makeOperation } from '../makeOperation.ts';
 import { type Result } from '../../result.ts';
-
-/**
- * Hono Context type (users must install @hono/node-server or similar)
- */
-export interface Context {
-  json(obj: unknown, status?: number): unknown;
-  [key: string]: unknown;
-}
+import type { Context } from 'hono';
 
 /**
  * Create Hono extension factory

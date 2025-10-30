@@ -8,8 +8,8 @@
     "dev": "bun run src/index.ts"
   },
   "dependencies": {
-    "@hono/node-server": "^1.12.1",
-    "hono": "^4.6.0",
+    "@hono/node-server": "latest",
+    "hono": "latest",
     "@uglyunicorn/amino": "file:../../"
   },
   "devDependencies": {

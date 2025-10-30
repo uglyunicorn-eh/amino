@@ -5,16 +5,23 @@
       "name": "@uglyunicorn/amino",
       "devDependencies": {
         "@types/bun": "latest",
+        "hono": "latest",
         "typescript": "^5.9.3",
       },
+      "peerDependencies": {
+        "hono": "latest",
+      },
+      "optionalPeers": [
+        "hono",
+      ],
     },
     "examples/hono": {
       "name": "hono-extension-example",
       "version": "1.0.0",
       "dependencies": {
-        "@hono/node-server": "^1.12.1",
+        "@hono/node-server": "latest",
         "@uglyunicorn/amino": "file:../../",
-        "hono": "^4.6.0",
+        "hono": "latest",
       },
       "devDependencies": {
         "@types/bun": "latest",

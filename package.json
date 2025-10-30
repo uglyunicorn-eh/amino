@@ -53,8 +53,17 @@
     "test:coverage": "bun test --coverage",
     "prepublishOnly": "bun run test && bun run build"
   },
+  "peerDependencies": {
+    "hono": "latest"
+  },
+  "peerDependenciesMeta": {
+    "hono": {
+      "optional": true
+    }
+  },
   "devDependencies": {
     "@types/bun": "latest",
+    "hono": "latest",
     "typescript": "^5.9.3"
   },
   "publishConfig": {
