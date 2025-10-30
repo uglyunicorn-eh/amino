@@ -76,8 +76,5 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          bunx --yes npm config set //registry.npmjs.org/:_authToken "${NODE_AUTH_TOKEN}"
-          bunx --yes npm whoami
-          bun publish --provenance --access public
-
-
+          bunx npm login
+          bun publish
