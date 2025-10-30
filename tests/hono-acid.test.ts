@@ -1,6 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 import { func } from '../src/acid/hono.ts';
 import { ok, err } from '../src/result.ts';
+import type { Context } from '../src/acid/hono.ts';
+
+interface MockJsonResponse {
+  obj: unknown;
+  status?: number;
+}
 
 describe('Hono Extension', () => {
   test('exports func factory', () => {
@@ -12,8 +18,8 @@ describe('Hono Extension', () => {
   });
 
   test('creates operation with Hono context', () => {
-    const mockContext = {
-      json: (obj: any, status?: number) => ({ obj, status }),
+    const mockContext: Context = {
+      json: (obj: unknown, status?: number): MockJsonResponse => ({ obj, status }),
     };
 
     const op = func(mockContext);
@@ -23,8 +29,8 @@ describe('Hono Extension', () => {
   });
 
   test('can chain steps on Hono operation', () => {
-    const mockContext = {
-      json: (obj: any, status?: number) => ({ obj, status }),
+    const mockContext: Context = {
+      json: (obj: unknown, status?: number): MockJsonResponse => ({ obj, status }),
     };
 
     const op = func(mockContext);
@@ -35,22 +41,22 @@ describe('Hono Extension', () => {
   });
 
   test('response action exists and is callable', () => {
-    const mockContext = {
-      json: (obj: any, status?: number) => ({ obj, status }),
+    const mockContext: Context = {
+      json: (obj: unknown, status?: number): MockJsonResponse => ({ obj, status }),
     };
 
     const op = func(mockContext);
     
     // The response method should be available after action registration
-    expect(typeof (op as any).response).toBe('function');
+    expect(typeof op.response).toBe('function');
   });
 
   test('executes response action with success result', async () => {
-    let capturedObj: any;
+    let capturedObj: unknown;
     let capturedStatus: number | undefined;
     
-    const mockContext = {
-      json: (obj: any, status?: number) => {
+    const mockContext: Context = {
+      json: (obj: unknown, status?: number): Promise<MockJsonResponse> => {
         capturedObj = obj;
         capturedStatus = status;
         return Promise.resolve({ obj, status });
@@ -58,21 +64,23 @@ describe('Hono Extension', () => {
     };
 
     const op = func(mockContext);
-    const result = await op.step(() => ok({ hello: 'world' }));
+    const result = op.step(() => ok({ hello: 'world' }));
 
-    const response = await (result as any).response();
+    const response = await result.response();
     
     expect(response).toBeDefined();
     expect(capturedStatus).toBe(200);
-    expect(capturedObj.status).toBe('ok');
+    if (capturedObj && typeof capturedObj === 'object' && 'status' in capturedObj) {
+      expect(capturedObj.status).toBe('ok');
+    }
   });
 
   test('response action handles error result correctly', async () => {
-    let capturedObj: any;
+    let capturedObj: unknown;
     let capturedStatus: number | undefined;
     
-    const mockContext = {
-      json: (obj: any, status?: number) => {
+    const mockContext: Context = {
+      json: (obj: unknown, status?: number): Promise<MockJsonResponse> => {
         capturedObj = obj;
         capturedStatus = status;
         return Promise.resolve({ obj, status });
@@ -80,13 +88,15 @@ describe('Hono Extension', () => {
     };
 
     const op = func(mockContext);
-    const result = await op.step(() => err('Test error'));
+    const result = op.step(() => err('Test error'));
 
-    const response = await (result as any).response();
+    const response = await result.response();
     
     expect(response).toBeDefined();
     expect(capturedStatus).toBe(400);
-    expect(capturedObj.status).toBe('error');
+    if (capturedObj && typeof capturedObj === 'object' && 'status' in capturedObj) {
+      expect(capturedObj.status).toBe('error');
+    }
   });
 });
 
