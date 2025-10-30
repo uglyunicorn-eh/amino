@@ -17,6 +17,9 @@ jobs:
         with:
           bun-version: latest
 
+      - name: Install deps
+        run: bun install --frozen-lockfile
+
       - name: Read version from package.json
         id: pkg
         run: |
@@ -32,6 +35,10 @@ jobs:
           else
             echo "exists=false" >> $GITHUB_OUTPUT
           fi
+
+      - name: Build
+        if: steps.tagcheck.outputs.exists == 'false'
+        run: bun run build
 
       - name: Create tag
         if: steps.tagcheck.outputs.exists == 'false'
@@ -58,5 +65,13 @@ jobs:
           body_path: body.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish to npm
+        if: steps.tagcheck.outputs.exists == 'false'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" > ~/.npmrc
+          npm publish --provenance --access public
 
 
