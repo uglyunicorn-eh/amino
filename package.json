@@ -1,6 +1,6 @@
 {
   "name": "@uglyunicorn/amino",
-  "version": "0.99.9",
+  "version": "0.99.10",
   "description": "A lightweight, type-safe Result pattern implementation for TypeScript",
   "keywords": [
     "result",
