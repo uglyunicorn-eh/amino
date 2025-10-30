@@ -47,7 +47,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "bun build src/index.ts --outdir dist --target node && bun build src/acids/index.ts --outdir dist/acids --target node && bun build src/acids/hono/index.ts --outdir dist/acids/hono --target node && bun run build:types",
+    "build": "bun run scripts/build.ts && bun run build:types",
     "build:types": "tsc --project tsconfig.build.json",
     "test": "bun test",
     "test:coverage": "bun test --coverage",
