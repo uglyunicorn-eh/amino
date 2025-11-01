@@ -174,7 +174,8 @@ class OperationImpl<V, C = undefined, E extends Error = Error> implements Operat
       const passed = isPromiseLike(result) ? await result : result;
       
       if (!passed) {
-        return [context, err(message || 'Assertion failed') as Result<V, E>];
+        // Return error directly - executor will apply error transformation via this.failure()
+        return [context, err(new Error(message || 'Assertion failed')) as Result<V, E>];
       }
       
       return [context, ok(value)];
