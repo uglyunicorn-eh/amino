@@ -732,4 +732,196 @@ describe('Operation Pipeline', () => {
       expect(result.res).toBe(84); // 42 * 2
     });
   });
+
+  describe('assert method', () => {
+    test('assert method validates value without transformation', async () => {
+      const op = operation('test', 42)
+        .assert((value: number) => value > 0)
+        .assert((value: number) => value < 100);
+      
+      const result = await op.complete();
+      
+      expect(result.err).toBeUndefined();
+      expect(result.res).toBe(42); // Value unchanged
+    });
+
+    test('assert method fails with default message when predicate is false', async () => {
+      const op = operation('test', -5)
+        .assert((value: number) => value > 0);
+      
+      const result = await op.complete();
+      
+      expect(result.res).toBeUndefined();
+      expect(result.err).toBeInstanceOf(Error);
+      expect(result.err?.message).toBe('Assertion failed');
+    });
+
+    test('assert method fails with custom message when predicate is false', async () => {
+      const op = operation('test', -5)
+        .assert((value: number) => value > 0, 'Value must be positive');
+      
+      const result = await op.complete();
+      
+      expect(result.res).toBeUndefined();
+      expect(result.err).toBeInstanceOf(Error);
+      expect(result.err?.message).toBe('Value must be positive');
+    });
+
+    test('assert method works with async predicates', async () => {
+      const op = operation('test', 42)
+        .assert(async (value: number) => {
+          await new Promise(resolve => setTimeout(resolve, 10));
+          return value > 0;
+        });
+      
+      const result = await op.complete();
+      
+      expect(result.err).toBeUndefined();
+      expect(result.res).toBe(42);
+    });
+
+    test('assert method works with context', async () => {
+      const op = operation({ min: 10, max: 100 }, 42)
+        .assert((value: number, ctx: { min: number; max: number }) => {
+          return value >= ctx.min && value <= ctx.max;
+        }, 'Value out of range');
+      
+      const result = await op.complete();
+      
+      expect(result.err).toBeUndefined();
+      expect(result.res).toBe(42);
+    });
+
+    test('assert method can be chained with steps', async () => {
+      const op = operation('test', 10)
+        .assert((value: number) => value > 0)
+        .step((value: number) => ok(value * 2))
+        .assert((value: number) => value < 100)
+        .step((value: number) => ok(value + 1));
+      
+      const result = await op.complete();
+      
+      expect(result.err).toBeUndefined();
+      expect(result.res).toBe(21); // ((10 * 2) + 1)
+    });
+
+    test('assert method preserves value type', () => {
+      const op = operation('test', 42)
+        .assert((value: number) => value > 0)
+        .assert((value: number) => value < 100);
+      
+      expect(op).toBeDefined();
+      // Type should remain number, not change
+    });
+
+    test('assert method fails fast and stops pipeline', async () => {
+      const op = operation('test', -5)
+        .assert((value: number) => value > 0, 'Must be positive')
+        .step((value: number) => ok(value * 2)) // Should not execute
+        .assert((value: number) => value < 100); // Should not execute
+      
+      const result = await op.complete();
+      
+      expect(result.res).toBeUndefined();
+      expect(result.err?.message).toBe('Must be positive');
+    });
+
+    test('assert method works with error transformation', async () => {
+      class ValidationError extends Error {
+        constructor(message: string, options?: { cause?: Error }) {
+          super(message, options);
+        }
+      }
+
+      const op = operation('test', -5)
+        .failsWith(ValidationError, 'Validation failed')
+        .assert((value: number) => value > 0, 'Value must be positive');
+      
+      const result = await op.complete();
+      
+      expect(result.res).toBeUndefined();
+      expect(result.err).toBeInstanceOf(ValidationError);
+      expect(result.err?.message).toBe('Validation failed');
+      if (result.err && 'cause' in result.err && result.err.cause instanceof Error) {
+        expect(result.err.cause.message).toBe('Value must be positive');
+      }
+    });
+
+    test('can chain multiple assert methods', async () => {
+      const op = operation('test', 42)
+        .assert((value: number) => value > 0, 'Must be positive')
+        .assert((value: number) => value < 100, 'Must be less than 100')
+        .assert((value: number) => value % 2 === 0, 'Must be even');
+      
+      const result = await op.complete();
+      
+      expect(result.err).toBeUndefined();
+      expect(result.res).toBe(42);
+    });
+
+    test('assert method can fail with context-dependent validation', async () => {
+      const op = operation({ role: 'admin' }, { name: 'John', age: 25 })
+        .assert((value: { name: string; age: number }, ctx: { role: string }) => {
+          return ctx.role === 'admin' || value.age >= 18;
+        }, 'Access denied');
+      
+      const result = await op.complete();
+      
+      expect(result.err).toBeUndefined();
+      expect(result.res).toEqual({ name: 'John', age: 25 });
+    });
+
+    test('assert method preserves value type through chain', () => {
+      const op = operation('test', 42)
+        .assert((value: number) => value > 0)
+        .assert((value: number) => value < 100)
+        .step((value: number) => ok(value.toString()));
+      
+      expect(op).toBeDefined();
+      // Value type changes only after step, not after assert
+    });
+
+    test('assert method can be used with mixed step and context', async () => {
+      const op = operation({ count: 0 }, 10)
+        .assert((value: number) => value > 0)
+        .step((value: number) => ok(value * 2))
+        .context((ctx: { count: number }, value: number) => ({ count: ctx.count + 1 }))
+        .assert((value: number) => value < 50)
+        .step((value: number) => ok(value + 1));
+      
+      const result = await op.complete();
+      
+      expect(result.err).toBeUndefined();
+      expect(result.res).toBe(21); // ((10 * 2) + 1)
+    });
+
+    test('assert method validates after context transformation', async () => {
+      const op = operation({ min: 0, max: 100 }, 42)
+        .context((ctx: { min: number; max: number }, value: number) => ({ 
+          min: ctx.min + 10, 
+          max: ctx.max - 10 
+        }))
+        .assert((value: number, ctx: { min: number; max: number }) => {
+          return value >= ctx.min && value <= ctx.max;
+        }, 'Value out of transformed range');
+      
+      const result = await op.complete();
+      
+      expect(result.err).toBeUndefined();
+      expect(result.res).toBe(42);
+    });
+
+    test('assert method with async predicate and custom message', async () => {
+      const op = operation('test', 42)
+        .assert(async (value: number) => {
+          await new Promise(resolve => setTimeout(resolve, 5));
+          return value > 0;
+        }, 'Async validation failed');
+      
+      const result = await op.complete();
+      
+      expect(result.err).toBeUndefined();
+      expect(result.res).toBe(42);
+    });
+  });
 });
