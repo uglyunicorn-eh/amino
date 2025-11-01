@@ -357,9 +357,9 @@ describe('Operation Pipeline', () => {
         timeout: number;
       }
 
-      const op = operation<number, string, Error>('test', 42)
-        .context((ctx: string, value: number) => ({ ...ctx, apiUrl: value.toString() }))
-        .context((ctx: Config, value: number) => ({ ...ctx, timeout: 5000 }));
+      const op = operation('test', 42)
+        .context((ctx: string, value: number) => ({ apiUrl: value.toString() }))
+        .context((ctx: { apiUrl: string }, value: number) => ({ ...ctx, timeout: 5000 }));
       
       expect(op).toBeDefined();
     });
@@ -536,7 +536,7 @@ describe('Operation Pipeline', () => {
       interface EmptyCtx {
         count?: number;
       }
-      const result = await operation<EmptyCtx, number[], Error>({}, [])
+      const result = await operation<number[], EmptyCtx>({}, [])
         .step((value: number[]) => ok(value.length))
         .context((ctx: EmptyCtx, value: number) => ({ ...ctx, count: value }))
         .step((value: number) => ok(value === 0))

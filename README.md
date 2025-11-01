@@ -154,7 +154,24 @@ const result = await operation({ userId: 'user123' }, 5)
   .complete();
 ```
 
-#### 3. Custom Error Types
+#### 3. Assertions/Validation
+
+Validate values without transformation:
+
+```typescript
+const result = await operation({ min: 10, max: 100 }, 42)
+  .assert((value: number) => value > 0, 'Value must be positive')
+  .assert((value: number, ctx: { min: number; max: number }) => {
+    return value >= ctx.min && value <= ctx.max;
+  }, 'Value out of range')
+  .step((value: number) => ok(value * 2))
+  .complete();
+
+// Assertions preserve the value type - no transformation
+// If assertion fails, pipeline stops with error message
+```
+
+#### 4. Custom Error Types
 
 ```typescript
 class ValidationError extends Error {
@@ -165,13 +182,14 @@ class ValidationError extends Error {
 
 const result = await operation({ requestId: 'req123' }, 42)
   .failsWith(ValidationError, 'Validation failed')
+  .assert((value: number) => value > 0, 'Value must be positive')
   .step((value: number) => err(new Error('Invalid input')))
   .complete();
 
 // result.err is ValidationError with cause chain
 ```
 
-#### 4. Async Operations
+#### 5. Async Operations
 
 ```typescript
 const result = await operation({ sessionId: 'sess456' }, 5)
@@ -181,7 +199,7 @@ const result = await operation({ sessionId: 'sess456' }, 5)
   .complete();
 ```
 
-#### 5. Type Safety
+#### 6. Type Safety
 
 TypeScript infers types throughout the chain:
 
@@ -228,6 +246,7 @@ The `.response()` action automatically sends JSON with proper status codes (200 
 - `operation<C, V>(context?: C, value?: V)` - Create operation pipeline
 - `.step<NV>(fn: (value: V, context: C) => Result<NV> | Promise<Result<NV>>)` - Add processing step
 - `.context<NC>(fn: (context: C, value: V) => NC | Promise<NC>)` - Transform context
+- `.assert(predicate, message?)` - Validate value without transformation (predicate: `(value: V, context: C) => boolean | Promise<boolean>`, optional error message)
 - `.failsWith<NE>(ErrorClass, message)` - Set custom error type
 - `.failsWith(message)` - Set generic error type
 - `.compile()` - Compile pipeline for optimal performance (54-91% faster)
