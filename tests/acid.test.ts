@@ -314,6 +314,175 @@ describe('Extension System', () => {
       // The action handler receives the initial context, not the transformed one
       expect(result.ctx).toBe('test');
     });
+
+    test('assert method preserves extension action', async () => {
+      const factory = makeOperation<number, { id: number }>(
+        (num) => ({ id: num })
+      )
+        .action('process', async (ctx, result) => {
+          if (result.err) {
+            return { status: 'error', error: result.err.message, id: ctx.id };
+          }
+          return { status: 'ok', value: result.res, id: ctx.id };
+        });
+
+      const op = factory(42);
+      const withAssert = op.assert((value: number) => value > 0);
+
+      // Verify extension action is preserved
+      expect(typeof withAssert.process).toBe('function');
+    });
+
+    test('assert method can be chained on extension operations', async () => {
+      const factory = makeOperation<number, { id: number }>(
+        (num) => ({ id: num })
+      )
+        .action('handle', async (ctx, result) => {
+          return { id: ctx.id, value: result.res };
+        });
+
+      const op = factory(10);
+      const withAssert = op.assert((value: number) => value > 0);
+      const withStep = withAssert.step<number>((_value: undefined) => ok(100));
+
+      expect(typeof withStep.handle).toBe('function');
+    });
+
+    test('assert preserves extension action through chaining', async () => {
+      const factory = makeOperation<string, { prefix: string }>(
+        (str) => ({ prefix: str })
+      )
+        .action('execute', async (ctx, result) => {
+          return { ctx: ctx.prefix, result: result.res };
+        });
+
+      const op = factory('test');
+      const withStep = op.step<number>((_value: undefined) => ok(42));
+      const withAssert = withStep.assert((value: number) => value > 0);
+      const chained = withAssert.assert((value: number) => value < 100);
+
+      // Verify extension action is preserved through all chains
+      expect(typeof chained.execute).toBe('function');
+
+      const result = await chained.execute();
+      expect(result.result).toBe(42);
+      expect(result.ctx).toBe('test');
+    });
+
+    test('assert works with extension actions', async () => {
+      const factory = makeOperation<number, { count: number }>(
+        (num) => ({ count: num })
+      )
+        .action('response', async (ctx, result) => {
+          if (result.err) {
+            return { status: 400, error: result.err.message, count: ctx.count };
+          }
+          return { status: 200, value: result.res, count: ctx.count };
+        });
+
+      const op = factory(5);
+      const withValue = op.step<number>((_value: undefined) => ok(42));
+      const withAssert = withValue.assert((value: number) => value > 0, 'Value must be positive');
+
+      const result = await withAssert.response();
+      expect(result.status).toBe(200);
+      expect(result.value).toBe(42);
+      expect(result.count).toBe(5);
+    });
+
+    test('assert fails correctly with extension actions', async () => {
+      const factory = makeOperation<number, { id: number }>(
+        (num) => ({ id: num })
+      )
+        .action('handle', async (ctx, result) => {
+          if (result.err) {
+            return { status: 'error', error: result.err.message, id: ctx.id };
+          }
+          return { status: 'ok', value: result.res, id: ctx.id };
+        });
+
+      const op = factory(99);
+      const withValue = op.step<number>((_value: undefined) => ok(50));
+      const withAssert = withValue.assert((value: number) => value > 100, 'Value too small');
+
+      const result = await withAssert.handle();
+      expect(result.status).toBe('error');
+      expect(result.error).toBe('Value too small');
+      expect(result.id).toBe(99);
+    });
+
+    test('assert integrates with failsWith on extensions', async () => {
+      class ValidationError extends Error {
+        constructor(message: string, options?: { cause?: Error }) {
+          super(message, options);
+        }
+      }
+
+      const factory = makeOperation<number, { id: number }>(
+        (num) => ({ id: num })
+      )
+        .action('process', async (ctx, result) => {
+          if (result.err) {
+            return {
+              status: 'error',
+              errorType: result.err.constructor.name,
+              errorMessage: result.err.message,
+              id: ctx.id
+            };
+          }
+          return { status: 'ok', value: result.res, id: ctx.id };
+        });
+
+      const op = factory(42);
+      const withFailsWith = op.failsWith(ValidationError, 'Validation failed');
+      const withAssert = withFailsWith.assert((value: number) => value > 50, 'Value too small');
+
+      const result = await withAssert.process();
+      expect(result.status).toBe('error');
+      expect(result.errorType).toBe('ValidationError');
+      expect(result.errorMessage).toBe('Validation failed');
+      expect(result.id).toBe(42);
+    });
+
+    test('assert with context on extension operations', async () => {
+      const factory = makeOperation<number, { min: number; max: number }>(
+        (num) => ({ min: num - 10, max: num + 10 })
+      )
+        .action('validate', async (ctx, result) => {
+          return { ctx, result: result.res };
+        });
+
+      const op = factory(50);
+      const withValue = op.step<number>((_value: undefined) => ok(55));
+      const withAssert = withValue.assert((value: number, ctx: { min: number; max: number }) => {
+        return value >= ctx.min && value <= ctx.max;
+      }, 'Value out of range');
+
+      const result = await withAssert.validate();
+      expect(result.result).toBe(55);
+      expect(result.ctx.min).toBe(40);
+      expect(result.ctx.max).toBe(60);
+    });
+
+    test('assert with async predicate on extension operations', async () => {
+      const factory = makeOperation<number, { id: number }>(
+        (num) => ({ id: num })
+      )
+        .action('check', async (ctx, result) => {
+          return { id: ctx.id, valid: result.res !== undefined };
+        });
+
+      const op = factory(10);
+      const withValue = op.step<number>((_value: undefined) => ok(42));
+      const withAssert = withValue.assert(async (value: number) => {
+        await new Promise(resolve => setTimeout(resolve, 5));
+        return value > 0;
+      });
+
+      const result = await withAssert.check();
+      expect(result.valid).toBe(true);
+      expect(result.id).toBe(10);
+    });
   });
 });
 

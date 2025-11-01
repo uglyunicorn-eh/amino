@@ -12,12 +12,13 @@ export type ActionHandler<C, R, E extends Error = Error> = <V>(context: C, resul
 
 /**
  * Extension operation interface - Operation with a single action method
- * Overrides step, context, and failsWith to preserve the extension action
+ * Overrides step, context, assert, and failsWith to preserve the extension action
  */
 export type ExtensionOperation<V, Ctx, ActionName extends string, ActionResult, E extends Error = Error> = 
-  Omit<Operation<V, Ctx, E>, 'step' | 'context' | 'failsWith'> & {
+  Omit<Operation<V, Ctx, E>, 'step' | 'context' | 'assert' | 'failsWith'> & {
     step<NV>(fn: Parameters<Operation<V, Ctx, E>['step']>[0]): ExtensionOperation<NV, Ctx, ActionName, ActionResult, E>;
     context<NC>(fn: Parameters<Operation<V, Ctx, E>['context']>[0]): ExtensionOperation<V, NC, ActionName, ActionResult, E>;
+    assert(predicate: Parameters<Operation<V, Ctx, E>['assert']>[0]): ExtensionOperation<V, Ctx, ActionName, ActionResult, E>;
     failsWith<NE extends Error>(errorClass: ErrorFactory<NE>, message: string): ExtensionOperation<V, Ctx, ActionName, ActionResult, NE>;
     failsWith(message: string): ExtensionOperation<V, Ctx, ActionName, ActionResult, Error>;
   } & {
@@ -109,6 +110,16 @@ function createExtensionOperation<V, Ctx, ActionName extends string, ActionResul
   const originalContext = baseOp.context.bind(baseOp);
   (baseOp as any).context = function<NC>(fn: Parameters<typeof baseOp.context>[0]): ExtensionOperation<V, NC, ActionName, ActionResult, E> {
     const newOp = originalContext(fn) as Operation<V, NC, E>;
+    return addExtensionAction(newOp);
+  };
+  
+  // Override assert to preserve extension action with correct typing
+  const originalAssert = baseOp.assert.bind(baseOp);
+  (baseOp as any).assert = function(
+    predicate: Parameters<typeof baseOp.assert>[0],
+    message?: Parameters<typeof baseOp.assert>[1]
+  ): ExtensionOperation<V, Ctx, ActionName, ActionResult, E> {
+    const newOp = originalAssert(predicate, message) as Operation<V, Ctx, E>;
     return addExtensionAction(newOp);
   };
   

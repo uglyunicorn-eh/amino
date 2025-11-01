@@ -32,6 +32,14 @@ export type StepFunction<V, C, NV, SE extends Error = Error> = (value: V, contex
 export type ContextFunction<C, V, NC> = (context: C, value: V) => NC | Promise<NC>;
 
 /**
+ * Assert function signature - validates value without transformation
+ * @param value - Current value
+ * @param context - Current context
+ * @returns Boolean indicating if assertion passes (sync or async)
+ */
+export type AssertFunction<V, C> = (value: V, context: C) => boolean | Promise<boolean>;
+
+/**
  * Error factory signature - matches standard Error constructor
  * @param message - Error message
  * @param options - Error options including cause
@@ -77,6 +85,14 @@ export interface Operation<V, C = undefined, E extends Error = Error> {
    * @returns New operation with updated context type
    */
   context<NC>(fn: ContextFunction<C, V, NC>): Operation<V, NC, E>;
+
+  /**
+   * Add an assertion/validation step that doesn't transform the value
+   * @param predicate - Predicate function that returns true if assertion passes
+   * @param message - Optional error message if assertion fails (default: 'Assertion failed')
+   * @returns New operation with same value type (no transformation)
+   */
+  assert(predicate: AssertFunction<V, C>, message?: string): Operation<V, C, E>;
 
   /**
    * Set error transformation for the operation with custom error class
@@ -150,6 +166,20 @@ class OperationImpl<V, C = undefined, E extends Error = Error> implements Operat
       return [isPromiseLike(newContext) ? await newContext : newContext, ok(value)];
     });
     return this as unknown as Operation<V, NC, E>;
+  }
+
+  assert(predicate: AssertFunction<V, C>, message?: string): Operation<V, C, E> {
+    this.state.steps.push(async (context: C, value: V) => {
+      const result = predicate(value, context);
+      const passed = isPromiseLike(result) ? await result : result;
+      
+      if (!passed) {
+        return [context, err(message || 'Assertion failed') as Result<V, E>];
+      }
+      
+      return [context, ok(value)];
+    });
+    return this as unknown as Operation<V, C, E>;
   }
 
   failsWith<NE extends Error>(errorClass: ErrorFactory<NE>, message: string): Operation<V, C, NE>;
