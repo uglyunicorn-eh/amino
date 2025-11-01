@@ -16,17 +16,12 @@ function isPromiseLike(value: unknown): value is Promise<unknown> {
 
 
 /**
- * Utility type for any Result or AsyncResult
- */
-export type AnyResult<T = any> = Result<T> | AsyncResult<T>;
-
-/**
  * Step function signature - transforms value and returns Result
  * @param value - Current value
  * @param context - Current context
- * @returns Result or AsyncResult of new value
+ * @returns Result or AsyncResult of new value with custom error type
  */
-export type StepFunction<V, C, NV> = (value: V, context: C) => AnyResult<NV>;
+export type StepFunction<V, C, NV, SE extends Error = Error> = (value: V, context: C) => Result<NV, SE> | AsyncResult<NV, SE>;
 
 /**
  * Context function signature - transforms context
@@ -45,14 +40,14 @@ export type ContextFunction<C, V, NC> = (context: C, value: V) => NC | Promise<N
 export type ErrorFactory<E extends Error> = new (message: string, options?: { cause?: Error }) => E;
 
 /**
- * Unified pipeline function signature - transforms both context and value
+ * Internal pipeline function signature - transforms both context and value
  * Context transformations always succeed, value transformations return Result
  * Always async for consistency
  * @param context - Current context
  * @param value - Current value
  * @returns Promise of tuple [new context, Result of new value]
  */
-export type PipelineFunction<V, NV, C, NC> = (context: C, value: V) => Promise<[NC, Result<NV>]>;
+type PipelineFunction<V, NV, C, NC> = (context: C, value: V) => Promise<[NC, Result<NV>]>;
 
 /**
  * Error transformer signature - transforms errors
@@ -71,10 +66,10 @@ type ErrorTransformer<E> = (originalError: Error) => E;
 export interface Operation<V, C = undefined, E extends Error = Error> {
   /**
    * Add a processing step to the pipeline
-   * @param fn - Step function that transforms the value
+   * @param fn - Step function that transforms the value (can return Result with custom error type)
    * @returns New operation with updated value type
    */
-  step<NV>(fn: StepFunction<V, C, NV>): Operation<NV, C, E>;
+  step<NV, SE extends Error = Error>(fn: StepFunction<V, C, NV, SE>): Operation<NV, C, E>;
 
   /**
    * Add a context transformation step to the pipeline
@@ -139,10 +134,12 @@ class OperationImpl<V, C = undefined, E extends Error = Error> implements Operat
     this.state = state || { steps: [] };
   }
 
-  step<NV>(fn: StepFunction<V, C, NV>): Operation<NV, C, E> {
+  step<NV, SE extends Error = Error>(fn: StepFunction<V, C, NV, SE>): Operation<NV, C, E> {
     this.state.steps.push(async (context: C, value: V) => {
       const result = fn(value, context);
-      return [context, isPromiseLike(result) ? await result : result];
+      const resolvedResult = isPromiseLike(result) ? await result : result;
+      // Normalize the error type to match operation's error type if needed
+      return [context, resolvedResult as Result<NV, E>];
     });
     return this as unknown as Operation<NV, C, E>;
   }
