@@ -18,7 +18,7 @@ export type ExtensionOperation<V, Ctx, ActionName extends string, ActionResult, 
   Omit<Operation<V, Ctx, E>, 'step' | 'context' | 'assert' | 'failsWith'> & {
     step<NV>(fn: Parameters<Operation<V, Ctx, E>['step']>[0]): ExtensionOperation<NV, Ctx, ActionName, ActionResult, E>;
     context<NC>(fn: Parameters<Operation<V, Ctx, E>['context']>[0]): ExtensionOperation<V, NC, ActionName, ActionResult, E>;
-    assert(predicate: Parameters<Operation<V, Ctx, E>['assert']>[0]): ExtensionOperation<V, Ctx, ActionName, ActionResult, E>;
+    assert(predicate: Parameters<Operation<V, Ctx, E>['assert']>[0], message?: Parameters<Operation<V, Ctx, E>['assert']>[1]): ExtensionOperation<V, Ctx, ActionName, ActionResult, E>;
     failsWith<NE extends Error>(errorClass: ErrorFactory<NE>, message: string): ExtensionOperation<V, Ctx, ActionName, ActionResult, NE>;
     failsWith(message: string): ExtensionOperation<V, Ctx, ActionName, ActionResult, Error>;
   } & {
