@@ -6,13 +6,25 @@ import { type Result } from '../result.ts';
  * Generic over the operation's value type so it receives the correct Result type
  * @param context - Final context from the pipeline
  * @param result - The final result from the pipeline (type comes from operation)
- * @returns Action-specific result
+ * @returns Action-specific result (can depend on V)
  */
 export type ActionHandler<C, R, E extends Error = Error> = <V>(context: C, result: Result<V, E>) => R | Promise<R>;
 
 /**
+ * Helper type to extract the actual return type from ActionResult
+ * Since ActionResult is registered as HonoActionResult<any> but should be HonoActionResult<V>,
+ * we need to handle the type substitution. However, TypeScript cannot directly substitute
+ * 'any' in a type alias, so we rely on the handler implementation returning the correct type.
+ * 
+ * For now, we pass through ActionResult. The actual type inference happens at the handler
+ * level where ctx.json() returns the correctly typed TypedResponse.
+ */
+type ExtractActionResult<V, ActionResult> = ActionResult;
+
+/**
  * Extension operation interface - Operation with a single action method
  * Overrides step, context, assert, and failsWith to preserve the extension action
+ * ActionResult can be a conditional type that depends on V (e.g., HonoActionResult<V>)
  */
 export type ExtensionOperation<V, Ctx, ActionName extends string, ActionResult, E extends Error = Error> = 
   Omit<Operation<V, Ctx, E>, 'step' | 'context' | 'assert' | 'failsWith'> & {
@@ -22,7 +34,7 @@ export type ExtensionOperation<V, Ctx, ActionName extends string, ActionResult, 
     failsWith<NE extends Error>(errorClass: ErrorFactory<NE>, message: string): ExtensionOperation<V, Ctx, ActionName, ActionResult, NE>;
     failsWith(message: string): ExtensionOperation<V, Ctx, ActionName, ActionResult, Error>;
   } & {
-    [K in ActionName]: () => Promise<ActionResult>;
+    [K in ActionName]: () => Promise<ExtractActionResult<V, ActionResult>>;
   };
 
 /**
