@@ -12,25 +12,26 @@ export type ActionHandler<C, R, E extends Error = Error> = <V>(context: C, resul
 
 
 /**
- * Reconstructs ActionResult types where `any` should be replaced with V.
+ * Type reconstruction placeholder for ActionResult.
  * 
- * For frameworks like Hono: Reconstructs HonoActionResult<any> to HonoActionResult<V>
- * by preserving Response branches, allowing TypeScript to infer the correct TypedResponse
- * type from the handler's implementation (e.g., ctx.json<V>()).
+ * Note: Currently a pass-through - actual type inference comes from the handler's
+ * implementation when called with Result<V, E>. The handler returns correctly typed
+ * values (e.g., ctx.json<V>() returns TypedResponse<JSONParsed<V>, ...>) which
+ * TypeScript infers correctly at usage sites, including Hono's hc<typeof app> client.
+ * 
+ * This type exists as a placeholder for potential future type reconstruction logic.
+ * Framework-specific types (like Hono's TypedResponse) would need to be imported to
+ * perform actual reconstruction, which we avoid to keep makeOperation generic.
  */
-export type ExtractActionResult<V, ActionResult> = 
-  ActionResult extends infer U
-    ? U extends Response
-      ? U
-      : U
-    : ActionResult;
+export type ExtractActionResult<V, ActionResult> = ActionResult;
 
 /**
  * Extracts the return type from ActionHandler when instantiated with V.
  * 
- * Reconstructs the registered ActionResult (e.g., HonoActionResult<any>) to the
- * correct type with V, allowing proper type inference for frameworks that use
- * generic return types (e.g., Hono's TypedResponse).
+ * Extracts the registered ActionResult type from the handler signature.
+ * The actual type inference comes from the handler's implementation when called
+ * with Result<V, E> - TypeScript infers V from the result type and the handler's
+ * generic signature returns correctly typed values (e.g., ctx.json<V>()).
  */
 type ExtractHandlerReturn<V, Handler> = 
   Handler extends ActionHandler<any, infer R, any>
