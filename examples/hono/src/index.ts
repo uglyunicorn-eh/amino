@@ -1,5 +1,4 @@
 import { Hono } from 'hono';
-import { serve } from '@hono/node-server';
 import { func } from '@uglyunicorn/amino/acids/hono';
 import { ok } from '@uglyunicorn/amino';
 
@@ -7,17 +6,12 @@ import { ok } from '@uglyunicorn/amino';
 const app = new Hono();
 
 // Simple example endpoint
-app.get('/', async (c) => {
-  return (await func(c)
+app.get('/', async (c) => 
+  await func(c)
     .step(() => ok({ hello: 'world' }))
-    .response()) as Response;
-});
+    .response()
+);
 
-// Start server
-const port = 3000;
-console.log(`🚀 Server running at http://localhost:${port}`);
-
-serve({
-  fetch: app.fetch,
-  port,
-});
+// Export app for Bun - Bun will automatically serve on port 3000
+// You can also specify a custom port: export default { port: 3000, fetch: app.fetch }
+export default { port: 3002, fetch: app.fetch };

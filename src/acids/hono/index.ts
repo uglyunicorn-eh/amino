@@ -12,6 +12,7 @@ type HonoActionResult<V> =
   | (Response & TypedResponse<JSONParsed<V>, 200, 'json'>)
   | (Response & TypedResponse<{ error: string }, 400, 'json'>);
 
+
 /**
  * Hono extension factory - creates operations with Hono context
  * The response action returns a Response with properly typed JSON payload
@@ -26,5 +27,6 @@ export const func = makeOperation<Context, { ctx: Context }>(
   }
   // Return typed response - Hono's ctx.json preserves the payload type from result.res
   // The type V flows through from the operation's result, and ctx.json returns TypedResponse<JSONParsed<V>, 200, 'json'>
-  return ctx.json(result.res, 200);
+  return ctx.json<V, 200>(result.res, 200);
 });
+
