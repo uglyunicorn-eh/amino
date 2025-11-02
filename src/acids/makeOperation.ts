@@ -10,31 +10,50 @@ import { type Result } from '../result.ts';
  */
 export type ActionHandler<C, R, E extends Error = Error> = <V>(context: C, result: Result<V, E>) => R | Promise<R>;
 
-/**
- * Helper type to extract the actual return type from ActionResult
- * Since ActionResult is registered as HonoActionResult<any> but should be HonoActionResult<V>,
- * we need to handle the type substitution. However, TypeScript cannot directly substitute
- * 'any' in a type alias, so we rely on the handler implementation returning the correct type.
- * 
- * For now, we pass through ActionResult. The actual type inference happens at the handler
- * level where ctx.json() returns the correctly typed TypedResponse.
- */
-type ExtractActionResult<V, ActionResult> = ActionResult;
 
 /**
- * Extension operation interface - Operation with a single action method
- * Overrides step, context, assert, and failsWith to preserve the extension action
- * ActionResult can be a conditional type that depends on V (e.g., HonoActionResult<V>)
+ * Type reconstruction placeholder for ActionResult.
+ * 
+ * Note: Currently a pass-through - actual type inference comes from the handler's
+ * implementation when called with Result<V, E>. The handler returns correctly typed
+ * values (e.g., ctx.json<V>() returns TypedResponse<JSONParsed<V>, ...>) which
+ * TypeScript infers correctly at usage sites, including Hono's hc<typeof app> client.
+ * 
+ * This type exists as a placeholder for potential future type reconstruction logic.
+ * Framework-specific types (like Hono's TypedResponse) would need to be imported to
+ * perform actual reconstruction, which we avoid to keep makeOperation generic.
  */
-export type ExtensionOperation<V, Ctx, ActionName extends string, ActionResult, E extends Error = Error> = 
+export type ExtractActionResult<V, ActionResult> = ActionResult;
+
+/**
+ * Extracts the return type from ActionHandler when instantiated with V.
+ * 
+ * Extracts the registered ActionResult type from the handler signature.
+ * The actual type inference comes from the handler's implementation when called
+ * with Result<V, E> - TypeScript infers V from the result type and the handler's
+ * generic signature returns correctly typed values (e.g., ctx.json<V>()).
+ */
+type ExtractHandlerReturn<V, Handler> = 
+  Handler extends ActionHandler<any, infer R, any>
+    ? ExtractActionResult<V, R extends Promise<infer PR> ? PR : R>
+    : never;
+
+/**
+ * Extension operation interface - Operation with a single action method.
+ * 
+ * Overrides step, context, assert, and failsWith to preserve the extension action.
+ * The action method's return type extracts from the handler when called with V,
+ * enabling proper type inference for frameworks using generic return types.
+ */
+export type ExtensionOperation<V, Ctx, ActionName extends string, ActionResult, Handler, E extends Error = Error> = 
   Omit<Operation<V, Ctx, E>, 'step' | 'context' | 'assert' | 'failsWith'> & {
-    step<NV>(fn: Parameters<Operation<V, Ctx, E>['step']>[0]): ExtensionOperation<NV, Ctx, ActionName, ActionResult, E>;
-    context<NC>(fn: Parameters<Operation<V, Ctx, E>['context']>[0]): ExtensionOperation<V, NC, ActionName, ActionResult, E>;
-    assert(predicate: Parameters<Operation<V, Ctx, E>['assert']>[0], message?: Parameters<Operation<V, Ctx, E>['assert']>[1]): ExtensionOperation<V, Ctx, ActionName, ActionResult, E>;
-    failsWith<NE extends Error>(errorClass: ErrorFactory<NE>, message: string): ExtensionOperation<V, Ctx, ActionName, ActionResult, NE>;
-    failsWith(message: string): ExtensionOperation<V, Ctx, ActionName, ActionResult, Error>;
+    step<NV>(fn: Parameters<Operation<V, Ctx, E>['step']>[0]): ExtensionOperation<NV, Ctx, ActionName, ActionResult, Handler, E>;
+    context<NC>(fn: Parameters<Operation<V, Ctx, E>['context']>[0]): ExtensionOperation<V, NC, ActionName, ActionResult, Handler, E>;
+    assert(predicate: Parameters<Operation<V, Ctx, E>['assert']>[0], message?: Parameters<Operation<V, Ctx, E>['assert']>[1]): ExtensionOperation<V, Ctx, ActionName, ActionResult, Handler, E>;
+    failsWith<NE extends Error>(errorClass: ErrorFactory<NE>, message: string): ExtensionOperation<V, Ctx, ActionName, ActionResult, Handler, NE>;
+    failsWith(message: string): ExtensionOperation<V, Ctx, ActionName, ActionResult, Handler, Error>;
   } & {
-    [K in ActionName]: () => Promise<ExtractActionResult<V, ActionResult>>;
+    [K in ActionName]: () => Promise<ExtractHandlerReturn<V, Handler>>;
   };
 
 /**
@@ -50,7 +69,7 @@ export interface ExtensionBuilder<CtxArg, Ctx> {
   action<ActionName extends string, ResultType, E extends Error = Error>(
     name: ActionName,
     handler: ActionHandler<Ctx, ResultType, E>
-  ): (arg: CtxArg) => ExtensionOperation<any, Ctx, ActionName, ResultType, E>;
+  ): (arg: CtxArg) => ExtensionOperation<any, Ctx, ActionName, ResultType, ActionHandler<Ctx, ResultType, E>, E>;
 }
 
 /**
@@ -61,14 +80,12 @@ export interface ExtensionBuilder<CtxArg, Ctx> {
 export function makeOperation<CtxArg, Ctx>(
   contextFactory: (arg: CtxArg) => Ctx
 ): ExtensionBuilder<CtxArg, Ctx> {
-  // Return builder with action method
   const builder: ExtensionBuilder<CtxArg, Ctx> = {
     action<ActionName extends string, ResultType, E extends Error = Error>(
       name: ActionName,
       handler: ActionHandler<Ctx, ResultType, E>
-    ): (arg: CtxArg) => ExtensionOperation<any, Ctx, ActionName, ResultType, E> {
-      // Return factory that creates extension operations
-      return (arg: CtxArg): ExtensionOperation<any, Ctx, ActionName, ResultType, E> => {
+    ): (arg: CtxArg) => ExtensionOperation<any, Ctx, ActionName, ResultType, ActionHandler<Ctx, ResultType, E>, E> {
+      return (arg: CtxArg): ExtensionOperation<any, Ctx, ActionName, ResultType, ActionHandler<Ctx, ResultType, E>, E> => {
         const ctx = contextFactory(arg);
         return createExtensionOperation(ctx, name, handler);
       };
@@ -82,65 +99,59 @@ export function makeOperation<CtxArg, Ctx>(
  * Create an extension operation with a single action
  * Overrides chaining methods to preserve the extension action
  */
-function createExtensionOperation<V, Ctx, ActionName extends string, ActionResult, E extends Error = Error>(
+function createExtensionOperation<V, Ctx, ActionName extends string, ActionResult, Handler extends ActionHandler<Ctx, ActionResult, any>, E extends Error = Error>(
   initialContext: Ctx,
   actionName: ActionName,
-  handler: ActionHandler<Ctx, ActionResult, E>
-): ExtensionOperation<V, Ctx, ActionName, ActionResult, E> {
-  // Create base operation
+  handler: Handler
+): ExtensionOperation<V, Ctx, ActionName, ActionResult, Handler, E> {
   const baseOp = operation<V, Ctx>(initialContext, undefined);
   
-  // Helper to add extension action to any operation
   const addExtensionAction = <NV, NC, NE extends Error = E>(
     op: Operation<NV, NC, NE>
-  ): ExtensionOperation<NV, NC, ActionName, ActionResult, NE> => {
-    // Check if property already exists (might have been added already)
+  ): ExtensionOperation<NV, NC, ActionName, ActionResult, Handler, NE> => {
     if (!(actionName in op)) {
       Object.defineProperty(op, actionName, {
         value: async function() {
           const result = await (op as Operation<NV, NC, NE>).complete();
-          // Handler is generic over V, so it will correctly receive Result<NV, E>
-          // Use type assertion for error type (E vs NE) since both extend Error
+          // Handler is generic over V, so TypeScript infers V=NV from Result<NV, E>
+          // This enables correct type inference for framework-specific return types
           return handler(initialContext, result as unknown as Result<NV, E>);
         },
         writable: false,
         enumerable: true,
-        configurable: true // Allow reconfiguration if needed
+        configurable: true
       });
     }
-    return op as ExtensionOperation<NV, NC, ActionName, ActionResult, NE>;
+    return op as ExtensionOperation<NV, NC, ActionName, ActionResult, Handler, NE>;
   };
-  
-  // Override step to preserve extension action with correct typing
+
+  // Override chaining methods to preserve extension action
   const originalStep = baseOp.step.bind(baseOp);
-  (baseOp as any).step = function<NV, SE extends Error = Error>(fn: Parameters<typeof baseOp.step>[0]): ExtensionOperation<NV, Ctx, ActionName, ActionResult, E> {
+  (baseOp as any).step = function<NV, SE extends Error = Error>(fn: Parameters<typeof baseOp.step>[0]): ExtensionOperation<NV, Ctx, ActionName, ActionResult, Handler, E> {
     const newOp = originalStep(fn) as Operation<NV, Ctx, E>;
     return addExtensionAction(newOp);
   };
-  
-  // Override context to preserve extension action with correct typing
+
   const originalContext = baseOp.context.bind(baseOp);
-  (baseOp as any).context = function<NC>(fn: Parameters<typeof baseOp.context>[0]): ExtensionOperation<V, NC, ActionName, ActionResult, E> {
+  (baseOp as any).context = function<NC>(fn: Parameters<typeof baseOp.context>[0]): ExtensionOperation<V, NC, ActionName, ActionResult, Handler, E> {
     const newOp = originalContext(fn) as Operation<V, NC, E>;
     return addExtensionAction(newOp);
   };
-  
-  // Override assert to preserve extension action with correct typing
+
   const originalAssert = baseOp.assert.bind(baseOp);
   (baseOp as any).assert = function(
     predicate: Parameters<typeof baseOp.assert>[0],
     message?: Parameters<typeof baseOp.assert>[1]
-  ): ExtensionOperation<V, Ctx, ActionName, ActionResult, E> {
+  ): ExtensionOperation<V, Ctx, ActionName, ActionResult, Handler, E> {
     const newOp = originalAssert(predicate, message) as Operation<V, Ctx, E>;
     return addExtensionAction(newOp);
   };
-  
-  // Override failsWith to preserve extension action (two overloads) with correct typing
+
   const originalFailsWith = baseOp.failsWith.bind(baseOp);
   (baseOp as any).failsWith = function<NE extends Error>(
     arg1: ErrorFactory<NE> | string,
     arg2?: string
-  ): ExtensionOperation<V, Ctx, ActionName, ActionResult, NE> {
+  ): ExtensionOperation<V, Ctx, ActionName, ActionResult, Handler, NE> {
     let newOp: Operation<any, any, any>;
     if (typeof arg1 === 'string') {
       newOp = originalFailsWith(arg1);
@@ -149,10 +160,9 @@ function createExtensionOperation<V, Ctx, ActionName extends string, ActionResul
     }
     return addExtensionAction(newOp);
   };
-  
-  // Add the action method
+
   addExtensionAction(baseOp);
-  
-  return baseOp as ExtensionOperation<V, Ctx, ActionName, ActionResult, E>;
+
+  return baseOp as ExtensionOperation<V, Ctx, ActionName, ActionResult, Handler, E>;
 }
 
