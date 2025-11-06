@@ -57,11 +57,11 @@ describe('Extension System', () => {
       const factory = makeOperation<number, TestContext>(
         (num) => ({ id: num })
       )
-        .action('finalize', async ({ id }, { res, err }: Result<number>) => {
-          if (err) {
-            return { status: 'error', id, error: err.message };
+        .action('finalize', async ({ id }, result) => {
+          if (result.err) {
+            return { status: 'error', id, error: result.err.message };
           }
-          return { status: 'ok', id, value: res };
+          return { status: 'ok', id, value: result.res };
         });
 
       const op = factory(42);
@@ -131,7 +131,11 @@ describe('Extension System', () => {
         (num) => ({ value: num })
       )
         .action('total', async (ctx, result) => {
-          return ctx.value + (result.res || 0);
+          if (result.err) {
+            return ctx.value;
+          }
+          const resultValue = typeof result.res === 'number' ? result.res : 0;
+          return ctx.value + resultValue;
         });
 
       const op = factory(10);
@@ -327,7 +331,8 @@ describe('Extension System', () => {
         });
 
       const op = factory(42);
-      const withAssert = op.assert((value: number) => value > 0);
+      const withStep = op.step<number>((_value: undefined) => ok(100));
+      const withAssert = withStep.assert((value: number) => value > 0, 'Value must be positive');
 
       // Verify extension action is preserved
       expect(typeof withAssert.process).toBe('function');
@@ -342,8 +347,9 @@ describe('Extension System', () => {
         });
 
       const op = factory(10);
-      const withAssert = op.assert((value: number) => value > 0);
-      const withStep = withAssert.step<number>((_value: undefined) => ok(100));
+      const withStep = op.step<number>((_value: undefined) => ok(100));
+      const withAssert = withStep.assert((value: number) => value > 0);
+      const withAnotherStep = withAssert.step<number>((value: number) => ok(value * 2));
 
       expect(typeof withStep.handle).toBe('function');
     });
@@ -434,7 +440,8 @@ describe('Extension System', () => {
         });
 
       const op = factory(42);
-      const withFailsWith = op.failsWith(ValidationError, 'Validation failed');
+      const withStep = op.step<number>((_value: undefined) => ok(30));
+      const withFailsWith = withStep.failsWith(ValidationError, 'Validation failed');
       const withAssert = withFailsWith.assert((value: number) => value > 50, 'Value too small');
 
       const result = await withAssert.process();
@@ -482,6 +489,38 @@ describe('Extension System', () => {
       const result = await withAssert.check();
       expect(result.valid).toBe(true);
       expect(result.id).toBe(10);
+    });
+
+    test('extension operation run method works correctly', async () => {
+      const factory = makeOperation<number, { count: number }>(
+        (num) => ({ count: num })
+      ).action('execute', async (ctx, result) => ({ ctx, result }));
+
+      const op = factory(5);
+      const opWithSteps = op
+        .step<number>((_value: undefined) => ok(10))
+        .step<number>((value: number) => ok(value * 2));
+
+      const result = await opWithSteps.run();
+      
+      expect(result.err).toBeUndefined();
+      expect(result.res).toBe(20);
+    });
+
+    test('extension operation complete method works correctly', async () => {
+      const factory = makeOperation<number, { id: number }>(
+        (num) => ({ id: num })
+      ).action('finalize', async (ctx, result) => ({ ctx, result }));
+
+      const op = factory(42);
+      const opWithSteps = op
+        .step<number>((_value: undefined) => ok(100))
+        .step<number>((value: number) => ok(value + 50));
+
+      const result = await opWithSteps.complete();
+      
+      expect(result.err).toBeUndefined();
+      expect(result.res).toBe(150);
     });
   });
 });

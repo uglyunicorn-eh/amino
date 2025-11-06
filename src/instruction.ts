@@ -36,10 +36,11 @@ type ErrorTransformer<E> = (originalError: Error) => E;
 
 /**
  * Compiled pipeline function with context already bound
+ * When IV is undefined, the value parameter is optional
  */
-type CompiledPipeline<IV, V, E extends Error = Error> = (
-  v: IV
-) => AsyncResult<V, E>;
+type CompiledPipeline<IV, V, E extends Error = Error> = IV extends undefined
+  ? (v?: IV) => AsyncResult<V, E>
+  : (v: IV) => AsyncResult<V, E>;
 
 /**
  * Type-safe Instruction interface - chainable pipeline builder
@@ -71,10 +72,11 @@ export interface Instruction<
 
   /**
    * Run the pipeline with a value (uses initial context)
-   * @param v - Initial value to process
+   * When IV is undefined, the value parameter is optional
+   * @param v - Initial value to process (optional when IV is undefined)
    * @returns Result of the pipeline execution
    */
-  run(v: IV): AsyncResult<V, E>;
+  run(...args: IV extends undefined ? [] : [IV]): AsyncResult<V, E>;
 
   /**
    * Set error transformation for the instruction with custom error class
@@ -175,14 +177,20 @@ class InstructionImpl<
   compile(overwriteContext?: IC): CompiledPipeline<IV, V, E> {
     const boundContext = (overwriteContext ?? this.initialContext) as IC;
 
-    return async (v: IV): Promise<Result<V, E>> => {
-      const result = await this.executeSteps(v, boundContext);
+    // Create a function that accepts optional parameter when IV is undefined
+    // TypeScript will handle the overload resolution at compile time
+    return (async (v?: IV): Promise<Result<V, E>> => {
+      // If v is undefined and IV is undefined, use undefined; otherwise use v ?? undefined
+      const value = (v ?? undefined) as IV;
+      const result = await this.executeSteps(value, boundContext);
       return result;
-    };
+    }) as CompiledPipeline<IV, V, E>;
   }
 
-  run(v: IV): AsyncResult<V, E> {
-    return this.compile()(v);
+  run(...args: IV extends undefined ? [] : [IV]): AsyncResult<V, E> {
+    // When IV is undefined, args is empty; otherwise args[0] is the value
+    const value = (args[0] ?? undefined) as IV;
+    return this.compile()(value as any);
   }
 
   failsWith<NE extends Error>(
@@ -368,10 +376,15 @@ class InstructionImpl<
  * Create a new instruction with initial context
  * @param initialContext - Initial context for the instruction pipeline
  * @returns New instruction instance
+ * 
+ * @template IC - Initial Context type
+ * @template IV - Initial Value type (defaults to undefined)
+ * 
+ * Note: When IV is undefined, the initial value is optional when calling run() or compile()
  */
-export function instruction<IC>(
+export function instruction<IC, IV = undefined>(
   initialContext: IC
-): Instruction<any, IC, any, IC, Error> {
-  return new InstructionImpl<any, IC, any, IC, Error>(initialContext);
+): Instruction<IV, IC, undefined, IC, Error> {
+  return new InstructionImpl<IV, IC, undefined, IC, Error>(initialContext);
 }
 

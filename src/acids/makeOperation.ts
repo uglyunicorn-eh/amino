@@ -1,5 +1,6 @@
-import { type Operation, type ErrorFactory, operation } from '../operation.ts';
-import { type Result } from '../result.ts';
+import { type Instruction, instruction } from '../instruction.ts';
+import { type ErrorFactory } from '../operation.ts';
+import { type Result, type AsyncResult } from '../result.ts';
 
 /**
  * Action handler signature - called when an action method is invoked
@@ -39,22 +40,46 @@ type ExtractHandlerReturn<V, Handler> =
     : never;
 
 /**
- * Extension operation interface - Operation with a single action method.
+ * Extension operation interface - Instruction with a single action method.
  * 
- * Overrides step, context, assert, and failsWith to preserve the extension action.
+ * Wraps an Instruction and adds an action method. Each chaining method returns
+ * a new ExtensionOperation instance (immutable pattern).
  * The action method's return type extracts from the handler when called with V,
  * enabling proper type inference for frameworks using generic return types.
+ * 
+ * Note: The handler receives the initial context (IC), not the transformed context (C).
+ * This is by design for consistency with the original implementation.
+ * 
+ * @param IV - Initial Value type (from Instruction)
+ * @param IC - Initial Context type (from Instruction) - used by handler
+ * @param V - Current Value type (from Instruction)
+ * @param C - Current Context type (from Instruction) - for internal pipeline use
+ * @param ActionName - Name of the action method
+ * @param ActionResult - Return type of the action handler
+ * @param Handler - Action handler type (expects IC, not C)
+ * @param E - Error type (from Instruction)
  */
-export type ExtensionOperation<V, Ctx, ActionName extends string, ActionResult, Handler, E extends Error = Error> = 
-  Omit<Operation<V, Ctx, E>, 'step' | 'context' | 'assert' | 'failsWith'> & {
-    step<NV>(fn: Parameters<Operation<V, Ctx, E>['step']>[0]): ExtensionOperation<NV, Ctx, ActionName, ActionResult, Handler, E>;
-    context<NC>(fn: Parameters<Operation<V, Ctx, E>['context']>[0]): ExtensionOperation<V, NC, ActionName, ActionResult, Handler, E>;
-    assert(predicate: Parameters<Operation<V, Ctx, E>['assert']>[0], message?: Parameters<Operation<V, Ctx, E>['assert']>[1]): ExtensionOperation<V, Ctx, ActionName, ActionResult, Handler, E>;
-    failsWith<NE extends Error>(errorClass: ErrorFactory<NE>, message: string): ExtensionOperation<V, Ctx, ActionName, ActionResult, Handler, NE>;
-    failsWith(message: string): ExtensionOperation<V, Ctx, ActionName, ActionResult, Handler, Error>;
-  } & {
-    [K in ActionName]: () => Promise<ExtractHandlerReturn<V, Handler>>;
-  };
+export type ExtensionOperation<IV, IC, V, C, ActionName extends string, ActionResult, Handler, E extends Error = Error> = {
+  step<NV, SE extends Error = Error>(
+    fn: Parameters<Instruction<IV, IC, V, C, E>['step']>[0]
+  ): ExtensionOperation<IV, IC, NV, C, ActionName, ActionResult, Handler, E>;
+  context<NC>(
+    fn: Parameters<Instruction<IV, IC, V, C, E>['context']>[0]
+  ): ExtensionOperation<IV, IC, V, NC, ActionName, ActionResult, Handler, E>;
+  assert(
+    predicate: Parameters<Instruction<IV, IC, V, C, E>['assert']>[0],
+    message?: Parameters<Instruction<IV, IC, V, C, E>['assert']>[1]
+  ): ExtensionOperation<IV, IC, V, C, ActionName, ActionResult, Handler, E>;
+  failsWith<NE extends Error>(
+    errorClass: ErrorFactory<NE>,
+    message: string
+  ): ExtensionOperation<IV, IC, V, C, ActionName, ActionResult, Handler, NE>;
+  failsWith(message: string): ExtensionOperation<IV, IC, V, C, ActionName, ActionResult, Handler, Error>;
+  run(...args: IV extends undefined ? [] : [IV]): Promise<Result<V, E>>;
+  complete(): Promise<Result<V, E>>;
+} & {
+  [K in ActionName]: () => Promise<ExtractHandlerReturn<V, Handler>>;
+};
 
 /**
  * Extension builder interface - allows registering ONE action
@@ -69,7 +94,7 @@ export interface ExtensionBuilder<CtxArg, Ctx> {
   action<ActionName extends string, ResultType, E extends Error = Error>(
     name: ActionName,
     handler: ActionHandler<Ctx, ResultType, E>
-  ): (arg: CtxArg) => ExtensionOperation<any, Ctx, ActionName, ResultType, ActionHandler<Ctx, ResultType, E>, E>;
+  ): (arg: CtxArg) => ExtensionOperation<undefined, Ctx, undefined, Ctx, ActionName, ResultType, ActionHandler<Ctx, ResultType, E>, E>;
 }
 
 /**
@@ -84,8 +109,8 @@ export function makeOperation<CtxArg, Ctx>(
     action<ActionName extends string, ResultType, E extends Error = Error>(
       name: ActionName,
       handler: ActionHandler<Ctx, ResultType, E>
-    ): (arg: CtxArg) => ExtensionOperation<any, Ctx, ActionName, ResultType, ActionHandler<Ctx, ResultType, E>, E> {
-      return (arg: CtxArg): ExtensionOperation<any, Ctx, ActionName, ResultType, ActionHandler<Ctx, ResultType, E>, E> => {
+    ): (arg: CtxArg) => ExtensionOperation<undefined, Ctx, undefined, Ctx, ActionName, ResultType, ActionHandler<Ctx, ResultType, E>, E> {
+      return (arg: CtxArg): ExtensionOperation<undefined, Ctx, undefined, Ctx, ActionName, ResultType, ActionHandler<Ctx, ResultType, E>, E> => {
         const ctx = contextFactory(arg);
         return createExtensionOperation(ctx, name, handler);
       };
@@ -97,72 +122,97 @@ export function makeOperation<CtxArg, Ctx>(
 
 /**
  * Create an extension operation with a single action
- * Overrides chaining methods to preserve the extension action
+ * Uses Instruction internally with immutable pattern - each chaining method
+ * returns a new ExtensionOperation instance
  */
-function createExtensionOperation<V, Ctx, ActionName extends string, ActionResult, Handler extends ActionHandler<Ctx, ActionResult, any>, E extends Error = Error>(
-  initialContext: Ctx,
+function createExtensionOperation<IV, IC, V, C, ActionName extends string, ActionResult, Handler extends ActionHandler<IC, ActionResult, any>, E extends Error = Error>(
+  initialContext: IC,
   actionName: ActionName,
   handler: Handler
-): ExtensionOperation<V, Ctx, ActionName, ActionResult, Handler, E> {
-  const baseOp = operation<V, Ctx>(initialContext, undefined);
+): ExtensionOperation<IV, IC, V, C, ActionName, ActionResult, Handler, E> {
+  // Start with a base instruction (initial value is undefined)
+  // The instruction starts with IV=undefined, V=undefined, but V will be transformed through steps
+  const baseInstr = instruction(initialContext) as unknown as Instruction<IV, IC, V, C, E>;
   
-  const addExtensionAction = <NV, NC, NE extends Error = E>(
-    op: Operation<NV, NC, NE>
-  ): ExtensionOperation<NV, NC, ActionName, ActionResult, Handler, NE> => {
-    if (!(actionName in op)) {
-      Object.defineProperty(op, actionName, {
-        value: async function() {
-          const result = await (op as Operation<NV, NC, NE>).complete();
-          // Handler is generic over V, so TypeScript infers V=NV from Result<NV, E>
-          // This enables correct type inference for framework-specific return types
-          return handler(initialContext, result as unknown as Result<NV, E>);
-        },
-        writable: false,
-        enumerable: true,
-        configurable: true
-      });
+  // Create extension operation wrapper
+  const createWrapper = <NIV, NIC, NV, NC, NE extends Error = E>(
+    instr: Instruction<NIV, NIC, NV, NC, NE>
+  ): ExtensionOperation<NIV, NIC, NV, NC, ActionName, ActionResult, Handler, NE> => {
+    // Create action method that runs the instruction and calls handler
+    const actionMethod = async () => {
+      // Run instruction without arguments (IV is undefined, so parameter is optional)
+      // Type assertion needed because TypeScript can't infer that NIV extends undefined
+      const result = await (instr.run as () => AsyncResult<NV, NE>)();
+      // Handler is generic over V, so TypeScript infers V=NV from Result<NV, E>
+      // This enables correct type inference for framework-specific return types
+      // Handler receives initial context (IC), not the transformed context (NC)
+      // This matches the original behavior and the type signature
+      return handler(initialContext, result as unknown as Result<NV, E>);
+    };
+
+    // Create failsWith function with proper overloads
+    function failsWithImpl<NE2 extends Error>(
+      errorClass: ErrorFactory<NE2>,
+      message: string
+    ): ExtensionOperation<NIV, NIC, NV, NC, ActionName, ActionResult, Handler, NE2>;
+    function failsWithImpl(message: string): ExtensionOperation<NIV, NIC, NV, NC, ActionName, ActionResult, Handler, Error>;
+    function failsWithImpl<NE2 extends Error>(
+      errorClassOrMessage: ErrorFactory<NE2> | string,
+      message?: string
+    ): ExtensionOperation<NIV, NIC, NV, NC, ActionName, ActionResult, Handler, NE2> | ExtensionOperation<NIV, NIC, NV, NC, ActionName, ActionResult, Handler, Error> {
+      const newInstr = typeof errorClassOrMessage === 'string'
+        ? instr.failsWith(errorClassOrMessage)
+        : instr.failsWith(errorClassOrMessage, message!);
+      return createWrapper(newInstr as Instruction<NIV, NIC, NV, NC, NE2>);
     }
-    return op as ExtensionOperation<NV, NC, ActionName, ActionResult, Handler, NE>;
+
+    // Create wrapper object with chaining methods and action
+    const wrapper = {
+      step<NVV, SE extends Error = NE>(
+        fn: Parameters<Instruction<NIV, NIC, NV, NC, NE>['step']>[0]
+      ): ExtensionOperation<NIV, NIC, NVV, NC, ActionName, ActionResult, Handler, NE> {
+        // Type assertion needed because Parameters<> doesn't preserve exact generic types
+        // The runtime behavior is correct - the function matches the expected signature
+        const newInstr = instr.step<NVV, SE>(fn as any);
+        return createWrapper(newInstr as Instruction<NIV, NIC, NVV, NC, NE>);
+      },
+
+      context<NCC>(
+        fn: Parameters<Instruction<NIV, NIC, NV, NC, NE>['context']>[0]
+      ): ExtensionOperation<NIV, NIC, NV, NCC, ActionName, ActionResult, Handler, NE> {
+        // Type assertion needed because Parameters<> doesn't preserve exact generic types
+        // The runtime behavior is correct - the function matches the expected signature
+        const newInstr = instr.context<NCC>(fn as any);
+        return createWrapper(newInstr as Instruction<NIV, NIC, NV, NCC, NE>);
+      },
+
+      assert(
+        predicate: Parameters<Instruction<NIV, NIC, NV, NC, NE>['assert']>[0],
+        message?: Parameters<Instruction<NIV, NIC, NV, NC, NE>['assert']>[1]
+      ): ExtensionOperation<NIV, NIC, NV, NC, ActionName, ActionResult, Handler, NE> {
+        const newInstr = instr.assert(predicate, message);
+        return createWrapper(newInstr);
+      },
+
+      failsWith: failsWithImpl,
+
+      run: (...args: NIV extends undefined ? [] : [NIV]) => {
+        // Type assertion needed for conditional type
+        return (instr.run as (...args: NIV extends undefined ? [] : [NIV]) => AsyncResult<NV, NE>)(...args);
+      },
+
+      complete: () => {
+        // When IV is undefined, run() can be called without arguments
+        // Type assertion needed because TypeScript can't infer the conditional type
+        return (instr.run as () => AsyncResult<NV, NE>)();
+      },
+
+      [actionName]: actionMethod,
+    } as ExtensionOperation<NIV, NIC, NV, NC, ActionName, ActionResult, Handler, NE>;
+
+    return wrapper;
   };
 
-  // Override chaining methods to preserve extension action
-  const originalStep = baseOp.step.bind(baseOp);
-  (baseOp as any).step = function<NV, SE extends Error = Error>(fn: Parameters<typeof baseOp.step>[0]): ExtensionOperation<NV, Ctx, ActionName, ActionResult, Handler, E> {
-    const newOp = originalStep(fn) as Operation<NV, Ctx, E>;
-    return addExtensionAction(newOp);
-  };
-
-  const originalContext = baseOp.context.bind(baseOp);
-  (baseOp as any).context = function<NC>(fn: Parameters<typeof baseOp.context>[0]): ExtensionOperation<V, NC, ActionName, ActionResult, Handler, E> {
-    const newOp = originalContext(fn) as Operation<V, NC, E>;
-    return addExtensionAction(newOp);
-  };
-
-  const originalAssert = baseOp.assert.bind(baseOp);
-  (baseOp as any).assert = function(
-    predicate: Parameters<typeof baseOp.assert>[0],
-    message?: Parameters<typeof baseOp.assert>[1]
-  ): ExtensionOperation<V, Ctx, ActionName, ActionResult, Handler, E> {
-    const newOp = originalAssert(predicate, message) as Operation<V, Ctx, E>;
-    return addExtensionAction(newOp);
-  };
-
-  const originalFailsWith = baseOp.failsWith.bind(baseOp);
-  (baseOp as any).failsWith = function<NE extends Error>(
-    arg1: ErrorFactory<NE> | string,
-    arg2?: string
-  ): ExtensionOperation<V, Ctx, ActionName, ActionResult, Handler, NE> {
-    let newOp: Operation<any, any, any>;
-    if (typeof arg1 === 'string') {
-      newOp = originalFailsWith(arg1);
-    } else {
-      newOp = originalFailsWith(arg1, arg2!);
-    }
-    return addExtensionAction(newOp);
-  };
-
-  addExtensionAction(baseOp);
-
-  return baseOp as ExtensionOperation<V, Ctx, ActionName, ActionResult, Handler, E>;
+  return createWrapper(baseInstr);
 }
 
