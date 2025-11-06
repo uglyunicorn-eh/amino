@@ -37,33 +37,20 @@ export type ErrorFactory<E extends Error> = new (message: string, options?: { ca
  * Optimized for performance: uses instanceof for native promises, duck-typing for custom ones
  */
 function isPromiseLike(value: unknown): value is Promise<unknown> {
-  // Fast path for native promises
   if (value instanceof Promise) {
     return true;
   }
   
-  // Duck-typing check for custom Promise-like objects
   return value !== null && typeof value === 'object' && typeof (value as { then?: unknown }).then === 'function';
 }
 
-/**
- * Step iteration - a function that executes a single step
- * Takes current value and context, returns result and new context
- */
 type StepIteration<V, C, NV, NC, E extends Error = Error> = (
   v: V,
   c: C
 ) => Promise<[Result<NV, E>, NC]>;
 
-/**
- * Error transformer signature - transforms errors
- */
 type ErrorTransformer<E> = (originalError: Error) => E;
 
-/**
- * Compiled pipeline function with context already bound
- * When IV is undefined, the value parameter is optional
- */
 type CompiledPipeline<IV, V, E extends Error = Error> = IV extends undefined
   ? (v?: IV) => AsyncResult<V, E>
   : (v: IV) => AsyncResult<V, E>;
@@ -183,6 +170,9 @@ class InstructionImpl<
    * Get the full steps array, building it from parent if needed
    * Uses structural sharing: only copies when necessary
    * Caches result to avoid rebuilding
+   * 
+   * Cache is safe because InstructionImpl instances are immutable - once created,
+   * the steps array and parent reference never change, so the cache never becomes stale.
    */
   private getSteps(): StepIteration<any, any, any, any, any>[] {
     if (this._cachedSteps) {
@@ -190,8 +180,6 @@ class InstructionImpl<
     }
 
     if (this._parent) {
-      // Build from parent's steps + our new steps (structural sharing)
-      // If we have a parent, this.steps contains only new steps added after branching
       this._cachedSteps = [...this._parent.getSteps(), ...this.steps];
     } else {
       this._cachedSteps = this.steps;
@@ -203,19 +191,16 @@ class InstructionImpl<
   compile(overwriteContext?: IC): CompiledPipeline<IV, V, E> {
     const boundContext = (overwriteContext ?? this.initialContext) as IC;
 
-    // Create a function that accepts optional parameter when IV is undefined
-    // TypeScript will handle the overload resolution at compile time
     return (async (v?: IV): Promise<Result<V, E>> => {
-      // If v is undefined and IV is undefined, use undefined; otherwise use v ?? undefined
-      const value = (v ?? undefined) as IV;
+      const value = v as IV;
       const result = await this.executeSteps(value, boundContext);
       return result;
     }) as CompiledPipeline<IV, V, E>;
   }
 
   run(...args: IV extends undefined ? [] : [IV]): AsyncResult<V, E> {
-    // When IV is undefined, args is empty; otherwise args[0] is the value
     const value = args[0] as IV;
+    // Type assertion needed due to conditional type complexity in CompiledPipeline
     return this.compile()(value as any);
   }
 
@@ -244,6 +229,8 @@ class InstructionImpl<
       }
       
       const errorTransformer: ErrorTransformer<NE> = (originalError: Error): NE =>
+        // Double type assertion needed: ErrorFactory<NE> -> unknown -> NE
+        // This is necessary because TypeScript can't verify the generic error factory pattern
         new (errorClassOrMessage as ErrorFactory<NE>)(message, {
           cause: originalError,
         }) as unknown as NE;
@@ -260,7 +247,6 @@ class InstructionImpl<
   step<NV, SE extends Error = Error>(
     fn: StepFunction<V, C, NV, SE>
   ): Instruction<IV, IC, NV, C, E> {
-    // Create step that only executes this transformation
     const newStep: StepIteration<V, C, NV, C, E> = async (
       v: V,
       c: C
@@ -270,7 +256,6 @@ class InstructionImpl<
       return [resolved as Result<NV, E>, c];
     };
 
-    // Use structural sharing for branching
     return this.createChildInstruction<NV, C>(newStep);
   }
 
@@ -278,7 +263,6 @@ class InstructionImpl<
     predicate: AssertFunction<V, C>,
     message?: string
   ): Instruction<IV, IC, V, C, E> {
-    // Create assertion step that validates without transformation
     const newStep: StepIteration<V, C, V, C, E> = async (
       v: V,
       c: C
@@ -294,12 +278,10 @@ class InstructionImpl<
       return [ok(v), c];
     };
 
-    // Use structural sharing for branching
     return this.createChildInstruction<V, C>(newStep);
   }
 
   context<NC>(fn: ContextFunction<C, V, NC>): Instruction<IV, IC, V, NC, E> {
-    // Create context transformation step
     const newStep: StepIteration<V, C, V, NC, E> = async (
       v: V,
       c: C
@@ -312,7 +294,6 @@ class InstructionImpl<
       return [ok(v), resolvedContext];
     };
 
-    // Use structural sharing for branching
     return this.createChildInstruction<V, NC>(newStep);
   }
 
@@ -324,10 +305,7 @@ class InstructionImpl<
   private createChildInstruction<NV, NC>(
     newStep: StepIteration<V, C, NV, NC, E>
   ): InstructionImpl<IV, IC, NV, NC, E> {
-    // If we have a parent, only store new steps (efficient branching)
-    // Otherwise, copy array and append new step (linear chain)
     if (this._parent) {
-      // Branching: only store the new step, reference parent
       return new InstructionImpl<IV, IC, NV, NC, E>(
         this.initialContext,
         [newStep],
@@ -335,7 +313,6 @@ class InstructionImpl<
         this
       );
     } else {
-      // Linear chain: copy and append
       const newSteps = [...this.steps, newStep];
       return new InstructionImpl<IV, IC, NV, NC, E>(
         this.initialContext,
@@ -353,10 +330,8 @@ class InstructionImpl<
       let currentValue: any = v;
       let currentContext: any = c;
 
-      // Get full steps array (may require building from parent)
       const steps = this.getSteps();
 
-      // Execute steps sequentially, passing current value and context
       for (const step of steps) {
         const [result, newContext] = await step(currentValue, currentContext);
         if (result.err !== undefined) {
