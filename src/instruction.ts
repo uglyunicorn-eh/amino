@@ -399,18 +399,40 @@ class InstructionImpl<
 }
 
 /**
+ * Create a new instruction without initial context
+ * @returns New instruction instance with undefined context
+ * 
+ * @template IV - Initial Value type (defaults to undefined)
+ * 
+ * Note: When IV is undefined, the initial value is optional when calling run() or compile()
+ * When IV is specified, the first step receives IV as the value type
+ */
+export function instruction<IV = undefined>(): Instruction<IV, undefined, IV extends undefined ? undefined : IV, undefined, Error>;
+
+/**
  * Create a new instruction with initial context
  * @param initialContext - Initial context for the instruction pipeline
  * @returns New instruction instance
  * 
- * @template IC - Initial Context type
  * @template IV - Initial Value type (defaults to undefined)
+ * @template IC - Initial Context type (inferred from initialContext)
  * 
  * Note: When IV is undefined, the initial value is optional when calling run() or compile()
+ * When IV is specified, the first step receives IV as the value type
  */
-export function instruction<IC, IV = undefined>(
+export function instruction<IV = undefined, IC = undefined>(
   initialContext: IC
-): Instruction<IV, IC, undefined, IC, Error> {
-  return new InstructionImpl<IV, IC, undefined, IC, Error>(initialContext);
+): Instruction<IV, IC, IV extends undefined ? undefined : IV, IC, Error>;
+
+/**
+ * Create a new instruction with optional initial context
+ * @param initialContext - Optional initial context for the instruction pipeline
+ * @returns New instruction instance
+ */
+export function instruction<IV = undefined, IC = undefined>(
+  initialContext?: IC
+): Instruction<IV, IC, IV extends undefined ? undefined : IV, IC, Error> {
+  type InitialV = IV extends undefined ? undefined : IV;
+  return new InstructionImpl<IV, IC, InitialV, IC, Error>(initialContext as IC);
 }
 
