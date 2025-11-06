@@ -15,12 +15,22 @@ bun add @uglyunicorn/amino
 Handle success and errors without exceptions:
 
 ```typescript
-import { ok, err } from '@uglyunicorn/amino';
+import { ok, err, trycatch } from '@uglyunicorn/amino';
 
 const { res, err: error } = ok(42);
 if (error === undefined) {
   console.log(res); // 42
 }
+
+// Wrap any function in a Result
+const result1 = trycatch(() => JSON.parse('{"name":"John"}'));
+// Sync: returns Result<T>
+
+const result2 = await trycatch(async () => {
+  const response = await fetch('https://api.example.com/data');
+  return response.json();
+});
+// Async: returns AsyncResult<T>
 ```
 
 ## Instruction Pipeline
@@ -83,7 +93,7 @@ instruction<number>()
 
 **Compile** - For better performance:
 ```typescript
-const compiled = instruction<number>({ base: 10 })
+const compiled = instruction<number, { base: number }>({ base: 10 })
   .step(async (v, ctx) => ok(v + ctx.base))
   .compile();
 
