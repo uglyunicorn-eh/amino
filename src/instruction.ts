@@ -1,10 +1,36 @@
 import { type Result, type AsyncResult, ok, err } from './result.ts';
-import type {
-  StepFunction,
-  ContextFunction,
-  AssertFunction,
-  ErrorFactory,
-} from './operation.ts';
+
+/**
+ * Step function signature - transforms value and returns Result
+ * @param value - Current value
+ * @param context - Current context
+ * @returns Result or AsyncResult of new value with custom error type
+ */
+export type StepFunction<V, C, NV, SE extends Error = Error> = (value: V, context: C) => Result<NV, SE> | AsyncResult<NV, SE>;
+
+/**
+ * Context function signature - transforms context
+ * @param context - Current context
+ * @param value - Current value
+ * @returns New context (sync or async)
+ */
+export type ContextFunction<C, V, NC> = (context: C, value: V) => NC | Promise<NC>;
+
+/**
+ * Assert function signature - validates value without transformation
+ * @param value - Current value
+ * @param context - Current context
+ * @returns Boolean indicating if assertion passes (sync or async)
+ */
+export type AssertFunction<V, C> = (value: V, context: C) => boolean | Promise<boolean>;
+
+/**
+ * Error factory signature - matches standard Error constructor
+ * @param message - Error message
+ * @param options - Error options including cause
+ * @returns New error instance
+ */
+export type ErrorFactory<E extends Error> = new (message: string, options?: { cause?: Error }) => E;
 
 /**
  * Utility to check if a value is promise-like

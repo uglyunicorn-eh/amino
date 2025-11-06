@@ -2,8 +2,6 @@
 
 const builds = [
   { entry: 'src/index.ts', outdir: 'dist' },
-  { entry: 'src/acids/index.ts', outdir: 'dist/acids' },
-  { entry: 'src/acids/hono/index.ts', outdir: 'dist/acids/hono' },
 ] as const;
 
 for (const { entry, outdir } of builds) {

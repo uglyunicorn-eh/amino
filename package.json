@@ -31,24 +31,6 @@
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
-    },
-    "./acids": {
-      "import": "./dist/acids/index.js",
-      "types": "./dist/acids/index.d.ts"
-    },
-    "./acids/hono": {
-      "import": "./dist/acids/hono/index.js",
-      "types": "./dist/acids/hono/index.d.ts"
-    }
-  },
-  "typesVersions": {
-    "*": {
-      "acids": [
-        "dist/acids/index.d.ts"
-      ],
-      "acids/hono": [
-        "dist/acids/hono/index.d.ts"
-      ]
     }
   },
   "files": [
