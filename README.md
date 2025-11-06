@@ -2,262 +2,115 @@
 
 [![codecov](https://codecov.io/gh/uglyunicorn-eh/amino/graph/badge.svg?token=fhY0SahI3q)](https://codecov.io/gh/uglyunicorn-eh/amino)
 
-A lightweight, type-safe Result pattern implementation for TypeScript. The fundamental blocks that transform chaotic code into reliable systems.
+A lightweight, type-safe Result pattern implementation for TypeScript.
 
 ## Installation
 
 ```bash
 bun add @uglyunicorn/amino
-# or
-npm install @uglyunicorn/amino
 ```
 
-## Core Concepts
-
-### Result Pattern
+## Result Pattern
 
 Handle success and errors without exceptions:
 
 ```typescript
-import { ok, err, type Result } from '@uglyunicorn/amino';
+import { ok, err, trycatch } from '@uglyunicorn/amino';
 
-function divide(a: number, b: number): Result<number> {
-  if (b === 0) return err('Division by zero');
-  return ok(a / b);
-}
-
-const { res, err: error } = divide(10, 2);
+const { res, err: error } = ok(42);
 if (error === undefined) {
-  console.log(res); // 5
+  console.log(res); // 42
 }
-```
 
-### Try-Catch Wrapper
+// Wrap any function in a Result
+const result1 = trycatch(() => JSON.parse('{"name":"John"}'));
+// Sync: returns Result<T>
 
-Wrap any function in a Result:
-
-```typescript
-import { trycatch } from '@uglyunicorn/amino';
-
-// Sync
-const { res, err } = trycatch(() => JSON.parse('{"name":"John"}'));
-
-// Async
-const { res, err } = await trycatch(async () => {
+const result2 = await trycatch(async () => {
   const response = await fetch('https://api.example.com/data');
   return response.json();
 });
+// Async: returns AsyncResult<T>
 ```
 
-## Operation Pipeline
+## Instruction Pipeline
 
-Chain operations with fail-fast error handling, context management, and **high-performance compilation**.
+Type-safe pipeline builder with immutable chaining.
 
 ### Basic Usage
 
 ```typescript
-import { operation, ok, err } from '@uglyunicorn/amino';
+import { instruction, ok } from '@uglyunicorn/amino';
 
-// Simple operation with no initial context or value
-const result = await operation()
-  .step(() => ok(42))
-  .step((value: number) => ok(value * 2))
-  .complete();
+// Without context
+const instr = instruction<number>()
+  .step(async (v: number) => ok(v * 2))
+  .step(async (v: number) => ok(v + 1));
 
-if (result.err === undefined) {
-  console.log(result.res); // 84
-}
+const result = await instr.run(5);
+// result.res === 11
 
-// With context and value
-const resultWithContext = await operation({ userId: 'user123', requestId: 'req456' }, 10)
-  .step((value: number) => ok(value * 2))
-  .step((value: number) => ok(value + 1))
-  .complete();
+// With context
+const instr2 = instruction<number, { base: number }>({ base: 10 })
+  .step(async (v: number, ctx) => ok(v + ctx.base));
 
-if (resultWithContext.err === undefined) {
-  console.log(resultWithContext.res); // 21
-}
-
-// Without context (uses undefined as default)
-const simpleResult = await operation(undefined, 10)
-  .step((value: number) => ok(value * 2))
-  .complete();
-
-if (simpleResult.err === undefined) {
-  console.log(simpleResult.res); // 20
-}
+const result2 = await instr2.run(5);
+// result2.res === 15
 ```
 
-### Performance Optimization with Compilation
+### Features
 
-For maximum performance, especially in high-throughput scenarios, use the `compile()` method:
-
+**Steps** - Transform values:
 ```typescript
-// Regular operation (good for development)
-const result = await operation(context, value)
-  .step(validateUser)
-  .step(processUser)
-  .complete();
+instruction<number>()
+  .step(async (v: number) => ok(v * 2))
+  .step(async (v: number) => ok(v.toString()));
+```
 
-// Compiled operation (54-91% faster for production)
-const compiledFn = operation(context, value)
-  .step(validateUser)
-  .step(processUser)
+**Context** - Transform context:
+```typescript
+instruction<number, { count: number }>({ count: 0 })
+  .context((ctx, v) => ({ ...ctx, count: ctx.count + v }));
+```
+
+**Assertions** - Validate without transformation:
+```typescript
+instruction<number>()
+  .step(async (v: number) => ok(v * 2))
+  .assert((v: number) => v > 0, 'Value must be positive');
+```
+
+**Error Transformation**:
+```typescript
+import { err } from '@uglyunicorn/amino';
+
+class CustomError extends Error {}
+
+instruction<number>()
+  .failsWith(CustomError, 'Operation failed')
+  .step(async (v: number) => err('Step failed'));
+```
+
+**Compile** - For better performance:
+```typescript
+const compiled = instruction<number, { base: number }>({ base: 10 })
+  .step(async (v, ctx) => ok(v + ctx.base))
   .compile();
 
-const result = await compiledFn(value);
-
-// Pre-compiled pipeline (91% faster - best for batch processing)
-const compiledPipeline = operation(context, value)
-  .step(validateUser)
-  .step(processUser)
-  .compile();
-
-// Reuse for multiple executions
-for (const user of users) {
-  const result = await compiledPipeline(user);
-}
-
-// Compiling operations without initial arguments
-// For best type safety, provide an initial value to infer types:
-const processNumber = operation(undefined, 0)
-  .step((value: number) => ok(value * 2))
-  .step((value: number) => ok(value + 1))
-  .compile();
-
-// Use with different values
-const result1 = await processNumber(5);  // 11
-const result2 = await processNumber(10); // 21
+const result = await compiled(5);
 ```
-
-### Key Features
-
-#### 1. Fail-Fast Error Handling
-
-```typescript
-const result = await operation({ operationId: 'op123' })
-  .step((value: number) => ok(value * 2))
-  .step((value: number) => err('Failed!'))
-  .step((value: number) => ok(value + 1)) // Skipped
-  .complete();
-
-// result.err.message === 'Failed!'
-```
-
-#### 2. Context Management
-
-```typescript
-const result = await operation({ userId: 'user123' }, 5)
-  .step((value: number) => ok(value * 2))
-  .context((ctx: { userId: string }, value: number) => ({ ...ctx, processed: true }))
-  .step((value: number) => ok(value + 1))
-  .complete();
-```
-
-#### 3. Assertions/Validation
-
-Validate values without transformation:
-
-```typescript
-const result = await operation({ min: 10, max: 100 }, 42)
-  .assert((value: number) => value > 0, 'Value must be positive')
-  .assert((value: number, ctx: { min: number; max: number }) => {
-    return value >= ctx.min && value <= ctx.max;
-  }, 'Value out of range')
-  .step((value: number) => ok(value * 2))
-  .complete();
-
-// Assertions preserve the value type - no transformation
-// If assertion fails, pipeline stops with error message
-```
-
-#### 4. Custom Error Types
-
-```typescript
-class ValidationError extends Error {
-  constructor(message: string, options?: { cause?: Error }) {
-    super(message, options);
-  }
-}
-
-const result = await operation({ requestId: 'req123' }, 42)
-  .failsWith(ValidationError, 'Validation failed')
-  .assert((value: number) => value > 0, 'Value must be positive')
-  .step((value: number) => err(new Error('Invalid input')))
-  .complete();
-
-// result.err is ValidationError with cause chain
-```
-
-#### 5. Async Operations
-
-```typescript
-const result = await operation({ sessionId: 'sess456' }, 5)
-  .step((value: number) => ok(value * 2))        // sync
-  .step(async (value: number) => ok(value + 1))  // async
-  .step((value: number) => ok(value * 2))        // sync
-  .complete();
-```
-
-#### 6. Type Safety
-
-TypeScript infers types throughout the chain:
-
-```typescript
-const result = await operation({ traceId: 'trace789' }, 42)
-  .step((value: number) => ok(value.toString()))  // number -> string
-  .step((value: string) => ok(value.length))      // string -> number
-  .step((value: number) => ok(value > 0))         // number -> boolean
-  .complete();
-
-// result.res is typed as boolean
-```
-
-## Extensions
-
-Framework-specific extensions add custom action methods to operations. Here's how to use the Hono extension:
-
-```typescript
-import { Hono } from 'hono';
-import { func } from '@uglyunicorn/amino/acids/hono';
-import { ok } from '@uglyunicorn/amino';
-
-const app = new Hono();
-
-app.post('/api/users', async (c) => {
-  return await func(c)
-    .step(() => ok({ id: 1, name: 'John' }))
-    .response();
-});
-```
-
-The `.response()` action automatically sends JSON with proper status codes (200 for success, 400 for errors).
 
 ## API
 
-### Result Functions
+**Result**: `ok(value)`, `err(error)`, `trycatch(fn)`
 
-- `ok<T>(value: T): Success<T>` - Create success result
-- `err(error: Error | string): Failure<Error>` - Create error result
-- `trycatch<T>(fn: () => T | Promise<T>): Result<T> | AsyncResult<T>` - Wrap function in Result
-
-### Operation
-
-- `operation<C, V>(context?: C, value?: V)` - Create operation pipeline
-- `.step<NV>(fn: (value: V, context: C) => Result<NV> | Promise<Result<NV>>)` - Add processing step
-- `.context<NC>(fn: (context: C, value: V) => NC | Promise<NC>)` - Transform context
-- `.assert(predicate, message?)` - Validate value without transformation (predicate: `(value: V, context: C) => boolean | Promise<boolean>`, optional error message)
-- `.failsWith<NE>(ErrorClass, message)` - Set custom error type
-- `.failsWith(message)` - Set generic error type
-- `.compile()` - Compile pipeline for optimal performance (54-91% faster)
-- `.compile(context)` - Compile pipeline with explicit context binding
-- `.complete()` - Execute pipeline and return AsyncResult<V, E>
-
-### Extensions
-
-- `@uglyunicorn/amino/acids/hono`
-  - `func(c: Context)` - Create Hono extension operation
-  - `.response()` - Execute pipeline and send JSON response
+**Instruction**: `instruction<IV, IC>(context?)`
+- `.step(fn)` - Transform value
+- `.context(fn)` - Transform context
+- `.assert(predicate, message?)` - Validate
+- `.failsWith(ErrorClass, message)` - Custom error
+- `.compile(context?)` - Compile pipeline
+- `.run(value?)` - Execute pipeline
 
 ## License
 

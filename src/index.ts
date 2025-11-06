@@ -5,6 +5,7 @@ export type { Result, Success, Failure, AsyncResult } from './result.ts';
 // Try-catch utility
 export { trycatch } from './trycatch.ts';
 
-// Operation pipeline functions
-export { operation } from './operation.ts';
-export type { Operation } from './operation.ts';
+// Instruction pipeline functions
+export { instruction } from './instruction.ts';
+export type { Instruction } from './instruction.ts';
+export type { StepFunction, ContextFunction, AssertFunction, ErrorFactory } from './instruction.ts';
