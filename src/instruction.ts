@@ -1,0 +1,349 @@
+import { type Result, type AsyncResult, ok, err } from './result.ts';
+import type {
+  StepFunction,
+  ContextFunction,
+  AssertFunction,
+  ErrorFactory,
+} from './operation.ts';
+
+/**
+ * Utility to check if a value is promise-like
+ * Optimized for performance: uses instanceof for native promises, duck-typing for custom ones
+ */
+function isPromiseLike(value: unknown): value is Promise<unknown> {
+  // Fast path for native promises
+  if (value instanceof Promise) {
+    return true;
+  }
+  
+  // Duck-typing check for custom Promise-like objects
+  return value !== null && typeof value === 'object' && typeof (value as { then?: unknown }).then === 'function';
+}
+
+/**
+ * Step iteration - a function that executes a single step
+ * Takes current value and context, returns result and new context
+ */
+type StepIteration<V, C, NV, NC, E extends Error = Error> = (
+  v: V,
+  c: C
+) => Promise<[Result<NV, E>, NC]>;
+
+/**
+ * Error transformer signature - transforms errors
+ */
+type ErrorTransformer<E> = (originalError: Error) => E;
+
+/**
+ * Compiled pipeline function with context already bound
+ */
+type CompiledPipeline<IV, V, E extends Error = Error> = (
+  v: IV
+) => AsyncResult<V, E>;
+
+/**
+ * Type-safe Instruction interface - chainable pipeline builder
+ * @param IV - Initial Value type (input type, preserved through chain)
+ * @param IC - Initial Context type (input type, preserved through chain)
+ * @param V - Current Value type (transforms through pipeline)
+ * @param C - Current Context type (transforms through pipeline)
+ * @param E - Error type (must extend Error)
+ */
+export interface Instruction<
+  IV = undefined,
+  IC = undefined,
+  V = undefined,
+  C = undefined,
+  E extends Error = Error,
+> {
+  /**
+   * Compile the pipeline with context override
+   * @param overwriteContext - Context to bind (overrides initial context)
+   * @returns Compiled function that only needs value
+   */
+  compile(overwriteContext: IC): CompiledPipeline<IV, V, E>;
+
+  /**
+   * Compile the pipeline with initial context
+   * @returns Compiled function that only needs value
+   */
+  compile(): CompiledPipeline<IV, V, E>;
+
+  /**
+   * Run the pipeline with a value (uses initial context)
+   * @param v - Initial value to process
+   * @returns Result of the pipeline execution
+   */
+  run(v: IV): AsyncResult<V, E>;
+
+  /**
+   * Set error transformation for the instruction with custom error class
+   * @param errorClass - Error class constructor
+   * @param message - Error message
+   * @returns New instruction with updated error type
+   */
+  failsWith<NE extends Error>(
+    errorClass: ErrorFactory<NE>,
+    message: string
+  ): Instruction<IV, IC, V, C, NE>;
+
+  /**
+   * Set error transformation for the instruction with generic error
+   * @param message - Error message string
+   * @returns New instruction with updated error type
+   */
+  failsWith(message: string): Instruction<IV, IC, V, C, Error>;
+
+  /**
+   * Add a processing step to the pipeline
+   * @param fn - Step function that transforms the value
+   * @returns New instruction with updated value type
+   */
+  step<NV, SE extends Error = Error>(
+    fn: StepFunction<V, C, NV, SE>
+  ): Instruction<IV, IC, NV, C, E>;
+
+  /**
+   * Add an assertion/validation step that doesn't transform the value
+   * @param predicate - Predicate function that returns true if assertion passes
+   * @param message - Optional error message if assertion fails
+   * @returns New instruction with same value type (no transformation)
+   */
+  assert(
+    predicate: AssertFunction<V, C>,
+    message?: string
+  ): Instruction<IV, IC, V, C, E>;
+
+  /**
+   * Add a context transformation step to the pipeline
+   * @param fn - Context function that transforms the context
+   * @returns New instruction with updated context type
+   */
+  context<NC>(fn: ContextFunction<C, V, NC>): Instruction<IV, IC, V, NC, E>;
+}
+
+/**
+ * Instruction node - represents a single step in the backward-linked list
+ */
+class InstructionNode {
+  constructor(
+    public readonly step: StepIteration<any, any, any, any, any>,
+    public readonly prev: InstructionNode | null
+  ) {}
+}
+
+
+/**
+ * Internal instruction implementation class with immutable linked list
+ */
+class InstructionImpl<
+  IV = undefined,
+  IC = undefined,
+  V = undefined,
+  C = undefined,
+  E extends Error = Error,
+> implements Instruction<IV, IC, V, C, E> {
+  private readonly last: InstructionNode | null;
+  private readonly initialContext: IC;
+  private readonly errorTransformer?: ErrorTransformer<E>;
+  private _compiledSteps: StepIteration<any, any, any, any, any>[] | null =
+    null;
+
+  constructor(
+    initialContext: IC,
+    last: InstructionNode | null = null,
+    errorTransformer?: ErrorTransformer<E>
+  ) {
+    this.initialContext = initialContext;
+    this.last = last;
+    this.errorTransformer = errorTransformer;
+  }
+
+  compile(overwriteContext?: IC): CompiledPipeline<IV, V, E> {
+    const boundContext = (overwriteContext ?? this.initialContext) as IC;
+    const steps = this.compileSteps();
+
+    return async (v: IV): Promise<Result<V, E>> => {
+      const result = await this.executeSteps(v, boundContext, steps);
+      return result;
+    };
+  }
+
+  run(v: IV): AsyncResult<V, E> {
+    return this.compile()(v);
+  }
+
+  failsWith<NE extends Error>(
+    errorClass: ErrorFactory<NE>,
+    message: string
+  ): Instruction<IV, IC, V, C, NE>;
+  failsWith(message: string): Instruction<IV, IC, V, C, Error>;
+  failsWith<NE extends Error>(
+    errorClassOrMessage: ErrorFactory<NE> | string,
+    message?: string
+  ): Instruction<IV, IC, V, C, NE> | Instruction<IV, IC, V, C, Error> {
+    if (typeof errorClassOrMessage === 'string') {
+      const errorTransformer: ErrorTransformer<Error> = (originalError: Error) =>
+        new Error(errorClassOrMessage, { cause: originalError });
+      
+      return new InstructionImpl<IV, IC, V, C, Error>(
+        this.initialContext,
+        this.last,
+        errorTransformer
+      ) as Instruction<IV, IC, V, C, Error>;
+    } else {
+      const errorTransformer: ErrorTransformer<NE> = (originalError: Error): NE =>
+        new (errorClassOrMessage as ErrorFactory<NE>)(message!, {
+          cause: originalError,
+        }) as unknown as NE;
+
+      return new InstructionImpl<IV, IC, V, C, NE>(
+        this.initialContext,
+        this.last,
+        errorTransformer
+      ) as Instruction<IV, IC, V, C, NE>;
+    }
+  }
+
+  step<NV, SE extends Error = Error>(
+    fn: StepFunction<V, C, NV, SE>
+  ): Instruction<IV, IC, NV, C, E> {
+    // Create step that only executes this transformation
+    const newStep: StepIteration<V, C, NV, C, E> = async (
+      v: V,
+      c: C
+    ): Promise<[Result<NV, E>, C]> => {
+      const stepResult = fn(v, c);
+      const resolved = isPromiseLike(stepResult) ? await stepResult : stepResult;
+      return [resolved as Result<NV, E>, c];
+    };
+
+    const newNode = new InstructionNode(newStep, this.last);
+    return new InstructionImpl<IV, IC, NV, C, E>(
+      this.initialContext,
+      newNode,
+      this.errorTransformer
+    );
+  }
+
+  assert(
+    predicate: AssertFunction<V, C>,
+    message?: string
+  ): Instruction<IV, IC, V, C, E> {
+    // Create assertion step that validates without transformation
+    const newStep: StepIteration<V, C, V, C, E> = async (
+      v: V,
+      c: C
+    ): Promise<[Result<V, E>, C]> => {
+      const result = predicate(v, c);
+      const passed = isPromiseLike(result) ? await result : result;
+
+      if (!passed) {
+        const error = new Error(message || 'Assertion failed');
+        return [err(error) as Result<V, E>, c];
+      }
+
+      return [ok(v), c];
+    };
+
+    const newNode = new InstructionNode(newStep, this.last);
+    return new InstructionImpl<IV, IC, V, C, E>(
+      this.initialContext,
+      newNode,
+      this.errorTransformer
+    );
+  }
+
+  context<NC>(fn: ContextFunction<C, V, NC>): Instruction<IV, IC, V, NC, E> {
+    // Create context transformation step
+    const newStep: StepIteration<V, C, V, NC, E> = async (
+      v: V,
+      c: C
+    ): Promise<[Result<V, E>, NC]> => {
+      const newContext = fn(c, v);
+      const resolvedContext = isPromiseLike(newContext)
+        ? await newContext
+        : newContext;
+
+      return [ok(v), resolvedContext];
+    };
+
+    const newNode = new InstructionNode(newStep, this.last);
+    return new InstructionImpl<IV, IC, V, NC, E>(
+      this.initialContext,
+      newNode,
+      this.errorTransformer
+    );
+  }
+
+  private compileSteps(): StepIteration<any, any, any, any, any>[] {
+    if (this._compiledSteps) {
+      return this._compiledSteps;
+    }
+
+    if (!this.last) {
+      this._compiledSteps = [];
+      return [];
+    }
+
+    // Traverse backward-linked list to build array
+    const steps: StepIteration<any, any, any, any, any>[] = [];
+    let node: InstructionNode | null = this.last;
+    while (node) {
+      steps.push(node.step);
+      node = node.prev;
+    }
+    // Reverse to get execution order (oldest first)
+    steps.reverse();
+
+    this._compiledSteps = steps;
+    return steps;
+  }
+
+  private async executeSteps(
+    v: IV,
+    c: IC,
+    steps: StepIteration<any, any, any, any, any>[]
+  ): Promise<Result<V, E>> {
+    try {
+      let currentValue: any = v;
+      let currentContext: any = c;
+
+      // Execute steps sequentially, passing current value and context
+      for (const step of steps) {
+        const [result, newContext] = await step(currentValue, currentContext);
+        if (result.err !== undefined) {
+          return this.failure(result.err);
+        }
+        currentValue = result.res;
+        currentContext = newContext;
+      }
+
+      return ok(currentValue);
+    } catch (error) {
+      return this.failure(error);
+    }
+  }
+
+  private failure(error: unknown): Result<V, E> {
+    const normalizedError =
+      error instanceof Error ? error : new Error(String(error));
+    return err(
+      this.errorTransformer
+        ? this.errorTransformer(normalizedError)
+        : normalizedError
+    ) as Result<V, E>;
+  }
+}
+
+/**
+ * Create a new instruction with initial context
+ * @param initialContext - Initial context for the instruction pipeline
+ * @returns New instruction instance
+ */
+export function instruction<IC>(
+  initialContext: IC
+): Instruction<any, IC, any, IC, Error> {
+  return new InstructionImpl<any, IC, any, IC, Error>(initialContext);
+}
+

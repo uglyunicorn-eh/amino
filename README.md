@@ -213,6 +213,90 @@ const result = await operation({ traceId: 'trace789' }, 42)
 // result.res is typed as boolean
 ```
 
+## Instruction Pipeline
+
+A type-safe instruction pipeline builder with immutable chaining and efficient memory usage.
+
+### Basic Usage
+
+```typescript
+import { instruction, ok } from '@uglyunicorn/amino';
+
+const initialContext = { base: 0 };
+
+const { compile, run } = instruction(initialContext)
+  .step(async (v: number, ctx: { base: number }) => ok(ctx.base + v))
+  .step(async (v: number) => ok(v * 2));
+
+// Run with a value
+const result = await run(5);
+// result.res === 10
+
+// Compile with context override
+const compiled = compile({ base: 3 });
+const result2 = await compiled(5);
+// result2.res === 16
+```
+
+### Features
+
+#### Context Transformation
+
+```typescript
+const { run } = instruction({ base: 0 })
+  .step(async (v: number, ctx: { base: number }) => ok(ctx.base + v))
+  .context((ctx: { base: number }, v: number) => ({ ...ctx, base: ctx.base + v }))
+  .step(async (v: number, ctx: { base: number }) => ok(ctx.base / v));
+
+const result = await run(5);
+// result.res === 1
+```
+
+#### Assertions
+
+```typescript
+const { run } = instruction({ base: 0 })
+  .step(async (v: number) => ok(v * 2))
+  .assert((v: number) => v !== 0, 'Result cannot be zero')
+  .step(async (v: number) => ok(v + 1));
+
+const result = await run(5);
+// result.res === 11
+```
+
+#### Error Transformation
+
+```typescript
+import { instruction, ok, err } from '@uglyunicorn/amino';
+
+class ValidationError extends Error {
+  constructor(message: string, options?: { cause?: Error }) {
+    super(message, options);
+  }
+}
+
+const { run } = instruction({ base: 0 })
+  .failsWith(ValidationError, 'Validation failed')
+  .step(async (v: number) => err(new Error('Step failed')));
+
+const result = await run(5);
+// result.err is ValidationError
+```
+
+#### Immutable Branching
+
+```typescript
+const baseInstr = instruction({ base: 0 })
+  .step(async (v: number) => ok(v * 2));
+
+const increment = baseInstr.step(async (v: number) => ok(v + 1));
+const decrement = baseInstr.step(async (v: number) => ok(v - 1));
+
+await increment.run(5);  // 11
+await decrement.run(5);   // 9
+await baseInstr.run(5);   // 10
+```
+
 ## Extensions
 
 Framework-specific extensions add custom action methods to operations. Here's how to use the Hono extension:
@@ -252,6 +336,18 @@ The `.response()` action automatically sends JSON with proper status codes (200 
 - `.compile()` - Compile pipeline for optimal performance (54-91% faster)
 - `.compile(context)` - Compile pipeline with explicit context binding
 - `.complete()` - Execute pipeline and return AsyncResult<V, E>
+
+### Instruction
+
+- `instruction<IC>(initialContext: IC)` - Create instruction pipeline with required context
+- `.step<NV>(fn: (value: V, context: C) => Result<NV> | Promise<Result<NV>>)` - Add processing step
+- `.context<NC>(fn: (context: C, value: V) => NC | Promise<NC>)` - Transform context
+- `.assert(predicate, message?)` - Validate value without transformation (predicate: `(value: V, context: C) => boolean | Promise<boolean>`, optional error message)
+- `.failsWith<NE>(ErrorClass, message)` - Set custom error type
+- `.failsWith(message)` - Set generic error type
+- `.compile()` - Compile instruction with initial context, returns `(value: IV) => AsyncResult<V, E>`
+- `.compile(overwriteContext: IC)` - Compile instruction with context override, returns `(value: IV) => AsyncResult<V, E>`
+- `.run(value: IV)` - Execute instruction with value (uses initial context), returns `AsyncResult<V, E>`
 
 ### Extensions
 
