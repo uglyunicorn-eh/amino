@@ -18,13 +18,15 @@ OperationImpl {
 }
 ```
 
-### Instruction (Optimized)
-- **Storage**: Direct array `steps[]` in `InstructionImpl`
+### Instruction (Optimized with Structural Sharing)
+- **Storage**: Direct array `steps[]` in `InstructionImpl` with optional parent reference
 - **Per chain operation**: O(N) - array copy (immutability requirement)
+- **Linear chain**: O(N) array copy per step
+- **Branching**: O(1) per new step (structural sharing - only stores new steps)
 - **Memory per step**: 1 array element reference
-- **Total memory for N steps**: O(N) - single array
-- **No cache needed**: Array already built and ready
-- **Branching**: Each branch has its own array copy (immutable)
+- **Total memory for N steps**: O(N) - single array (or shared parent + new steps)
+- **Caching**: Full steps array cached after first `getSteps()` call
+- **Branching optimization**: Branches store only new steps, reference parent for common prefix
 
 ```typescript
 // Memory layout:
@@ -59,27 +61,34 @@ step(fn) {
 - **Memory**: No new allocations (reuses instance)
 - **Side effect**: Mutates original instance
 
-### Instruction (Optimized)
+### Instruction (Optimized with Structural Sharing)
 ```typescript
 step(fn) {
-  const newSteps = [...this.steps, newStep];  // O(N) array copy
-  return new InstructionImpl(..., newSteps, ...);  // O(1)
+  if (this._parent) {
+    // Branching: only store new step, reference parent
+    return new InstructionImpl(..., [newStep], ..., this);
+  } else {
+    // Linear chain: copy and append
+    const newSteps = [...this.steps, newStep];  // O(N) array copy
+    return new InstructionImpl(..., newSteps, ...);
+  }
 }
 ```
-- **Time**: O(N) - array copy (immutability requirement)
-- **Memory**: 1 allocation (InstructionImpl) + array copy
+- **Linear chain**: O(N) - array copy (immutability requirement)
+- **Branching**: O(1) - only store new step, reference parent
+- **Memory**: 1 allocation (InstructionImpl) + array copy (linear) or just new step (branching)
 - **Side effect**: None (immutable)
 
 ### Chain Operation Comparison
 
 | Metric | Operation | Instruction |
 |--------|-----------|-------------|
-| **Time Complexity** | O(1) amortized | O(N) array copy |
-| **Memory Allocations** | 0 (reuse) | 1 per step + array copy |
+| **Time Complexity** | O(1) amortized | O(N) linear, O(1) branching |
+| **Memory Allocations** | 0 (reuse) | 1 per step + array copy (linear) or just new step (branching) |
 | **Instance Creation** | 0 (mutates) | 1 per step |
 | **Immutability** | No | Yes |
 
-**Verdict**: Operation is faster for chaining (O(1) vs O(N)), but Instruction maintains immutability at the cost of array copying.
+**Verdict**: Operation is faster for linear chaining (O(1) vs O(N)). Instruction optimizes branching to O(1) per step using structural sharing, but linear chains still require O(N) array copy to maintain immutability.
 
 ## Compilation/Run Overhead
 
@@ -134,26 +143,30 @@ const branch2 = base.step(f3b);  // branch2 includes f3a too!
 - **Memory**: O(N) total (shared array)
 - **Correctness**: Dangerous - branches can interfere
 
-### Instruction (Optimized)
+### Instruction (Optimized with Structural Sharing)
 ```typescript
 const base = instruction(ctx).step(f1).step(f2);
-const branch1 = base.step(f3a);  // New instance, array copy
-const branch2 = base.step(f3b);  // New instance, array copy
+const branch1 = base.step(f3a);  // New instance, full copy (first branch)
+const branch2 = base.step(f3b);  // New instance, full copy (first branch)
+// But if we continue on branch1:
+const branch1a = branch1.step(f4a);  // O(1) - only stores [f4a], references branch1
 ```
 - **Benefit**: Immutable - each branch is independent
-- **Memory**: O(N) per branch (separate arrays)
+- **Memory**: O(N) for first branch (full copy), O(1) for continued chaining (structural sharing)
 - **Correctness**: Safe - branches don't interfere
+- **Caching**: Full steps array cached after first `getSteps()` call
 
 ### Branching Comparison
 
 | Scenario | Operation | Instruction |
 |----------|-----------|-------------|
-| **Memory for 2 branches** | O(N) shared | O(2N) separate |
+| **Memory for 2 branches** | O(N) shared | O(N) + O(1) per branch step |
 | **Safety** | Low (mutation risk) | High (immutable) |
 | **Correctness** | Requires careful use | Always correct |
-| **Branch cost** | O(1) push | O(N) array copy |
+| **First branch cost** | O(1) push | O(N) array copy |
+| **Continued branch cost** | O(1) push | O(1) structural sharing |
 
-**Verdict**: Instruction is safer but uses more memory for branches and requires O(N) array copy per branch. Operation is more memory-efficient but requires careful usage.
+**Verdict**: Instruction is safer and uses structural sharing for continued chaining (O(1) per step after first branch). First branch still requires O(N) copy, but subsequent steps on that branch are O(1).
 
 ## Execution Performance
 
@@ -191,14 +204,15 @@ for (const step of this.steps) {  // Direct array access
 
 | Aspect | Operation | Instruction | Winner |
 |--------|-----------|-------------|--------|
-| **Chain operation time** | O(1) | O(N) array copy | Operation |
-| **Chain operation memory** | 0 allocations | 1 allocation + array copy | Operation |
+| **Chain operation time** | O(1) | O(N) linear, O(1) branching | Operation (linear), Tie (branching) |
+| **Chain operation memory** | 0 allocations | 1 allocation + array copy (linear) or just new step (branching) | Operation |
 | **Compilation time** | O(1) | O(1) | Tie |
 | **Execution time** | O(N) | O(N) | Tie |
 | **Memory (single chain)** | O(N) | O(N) | Tie |
-| **Memory (branching)** | O(N) shared | O(N) per branch | Operation |
+| **Memory (branching)** | O(N) shared | O(N) first branch, O(1) per continued step | Operation (first), Instruction (continued) |
 | **Immutability** | No | Yes | Instruction |
 | **Branching safety** | Low | High | Instruction |
+| **Caching** | N/A | Full steps cached after first use | Instruction |
 
 ## Use Cases
 
@@ -233,8 +247,9 @@ for (const step of this.steps) {  // Direct array access
 
 ### Branch into 10 chains
 - **Operation**: ~0.1ms (just array pushes, but unsafe)
-- **Instruction**: ~10ms (10 array copies, but safe)
-- **Overhead**: ~100x slower, but safe and correct
+- **Instruction**: ~10ms (10 array copies for first branches, but safe)
+- **Continued chaining on branches**: ~0.1ms (O(1) structural sharing)
+- **Overhead**: ~100x slower for first branches, but safe and correct. Continued chaining is O(1).
 
 ## Conclusion
 
@@ -252,7 +267,15 @@ The overhead trade-off is:
 - **Operation**: Faster chaining (O(1)), zero compilation cost, but mutable and unsafe for branching
 - **Instruction**: Slower chaining (O(N) array copy), zero compilation cost (optimized), immutable and safe for branching
 
-**Key Optimization**: Instruction now has O(1) compilation (array is built during chain operations), eliminating the previous O(N) compilation overhead. The trade-off is O(N) array copy per chain operation to maintain immutability.
+**Key Optimizations**:
+1. **Phase 1**: O(1) compilation (array built during chain operations) - eliminated O(N) compilation overhead
+2. **Phase 2**: Structural sharing for branching - continued chaining on branches is O(1) instead of O(N)
+3. **Caching**: Full steps array cached after first `getSteps()` call to avoid rebuilding
+
+The trade-offs:
+- Linear chains: O(N) array copy per step (immutability requirement)
+- Branching: O(N) for first branch, O(1) for continued steps (structural sharing)
+- Memory: O(N) per branch, but shared parent arrays reduce overhead
 
 Choose based on your needs: performance vs. safety.
 

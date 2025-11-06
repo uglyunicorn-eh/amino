@@ -124,6 +124,7 @@ export interface Instruction<
 
 /**
  * Internal instruction implementation class with immutable array storage
+ * Uses structural sharing for efficient branching
  */
 class InstructionImpl<
   IV = undefined,
@@ -135,15 +136,40 @@ class InstructionImpl<
   private readonly steps: StepIteration<any, any, any, any, any>[];
   private readonly initialContext: IC;
   private readonly errorTransformer?: ErrorTransformer<E>;
+  private readonly _parent?: InstructionImpl<any, any, any, any, any>;
+  private _cachedSteps: StepIteration<any, any, any, any, any>[] | null = null;
 
   constructor(
     initialContext: IC,
     steps: StepIteration<any, any, any, any, any>[] = [],
-    errorTransformer?: ErrorTransformer<E>
+    errorTransformer?: ErrorTransformer<E>,
+    parent?: InstructionImpl<any, any, any, any, any>
   ) {
     this.initialContext = initialContext;
     this.steps = steps;
     this.errorTransformer = errorTransformer;
+    this._parent = parent;
+  }
+
+  /**
+   * Get the full steps array, building it from parent if needed
+   * Uses structural sharing: only copies when necessary
+   * Caches result to avoid rebuilding
+   */
+  private getSteps(): StepIteration<any, any, any, any, any>[] {
+    if (this._cachedSteps) {
+      return this._cachedSteps;
+    }
+
+    if (this._parent) {
+      // Build from parent's steps + our new steps (structural sharing)
+      // If we have a parent, this.steps contains only new steps added after branching
+      this._cachedSteps = [...this._parent.getSteps(), ...this.steps];
+    } else {
+      this._cachedSteps = this.steps;
+    }
+
+    return this._cachedSteps;
   }
 
   compile(overwriteContext?: IC): CompiledPipeline<IV, V, E> {
@@ -175,7 +201,8 @@ class InstructionImpl<
       return new InstructionImpl<IV, IC, V, C, Error>(
         this.initialContext,
         this.steps,
-        errorTransformer
+        errorTransformer,
+        this._parent
       ) as Instruction<IV, IC, V, C, Error>;
     } else {
       const errorTransformer: ErrorTransformer<NE> = (originalError: Error): NE =>
@@ -186,7 +213,8 @@ class InstructionImpl<
       return new InstructionImpl<IV, IC, V, C, NE>(
         this.initialContext,
         this.steps,
-        errorTransformer
+        errorTransformer,
+        this._parent
       ) as Instruction<IV, IC, V, C, NE>;
     }
   }
@@ -204,13 +232,26 @@ class InstructionImpl<
       return [resolved as Result<NV, E>, c];
     };
 
-    // Copy array and append new step (immutable)
-    const newSteps = [...this.steps, newStep];
-    return new InstructionImpl<IV, IC, NV, C, E>(
-      this.initialContext,
-      newSteps,
-      this.errorTransformer
-    );
+    // Use structural sharing for branching
+    // If we have a parent, only store new steps (efficient branching)
+    // Otherwise, copy array and append new step (linear chain)
+    if (this._parent) {
+      // Branching: only store the new step, reference parent
+      return new InstructionImpl<IV, IC, NV, C, E>(
+        this.initialContext,
+        [newStep],
+        this.errorTransformer,
+        this
+      );
+    } else {
+      // Linear chain: copy and append
+      const newSteps = [...this.steps, newStep];
+      return new InstructionImpl<IV, IC, NV, C, E>(
+        this.initialContext,
+        newSteps,
+        this.errorTransformer
+      );
+    }
   }
 
   assert(
@@ -233,13 +274,23 @@ class InstructionImpl<
       return [ok(v), c];
     };
 
-    // Copy array and append new step (immutable)
-    const newSteps = [...this.steps, newStep];
-    return new InstructionImpl<IV, IC, V, C, E>(
-      this.initialContext,
-      newSteps,
-      this.errorTransformer
-    );
+    // Use structural sharing for branching
+    if (this._parent) {
+      // Branching: only store the new step, reference parent
+      return new InstructionImpl<IV, IC, V, C, E>(
+        this.initialContext,
+        [newStep],
+        this.errorTransformer,
+        this
+      );
+    } else {
+      const newSteps = [...this.steps, newStep];
+      return new InstructionImpl<IV, IC, V, C, E>(
+        this.initialContext,
+        newSteps,
+        this.errorTransformer
+      );
+    }
   }
 
   context<NC>(fn: ContextFunction<C, V, NC>): Instruction<IV, IC, V, NC, E> {
@@ -256,13 +307,23 @@ class InstructionImpl<
       return [ok(v), resolvedContext];
     };
 
-    // Copy array and append new step (immutable)
-    const newSteps = [...this.steps, newStep];
-    return new InstructionImpl<IV, IC, V, NC, E>(
-      this.initialContext,
-      newSteps,
-      this.errorTransformer
-    );
+    // Use structural sharing for branching
+    if (this._parent) {
+      // Branching: only store the new step, reference parent
+      return new InstructionImpl<IV, IC, V, NC, E>(
+        this.initialContext,
+        [newStep],
+        this.errorTransformer,
+        this
+      );
+    } else {
+      const newSteps = [...this.steps, newStep];
+      return new InstructionImpl<IV, IC, V, NC, E>(
+        this.initialContext,
+        newSteps,
+        this.errorTransformer
+      );
+    }
   }
 
   private async executeSteps(
@@ -273,8 +334,11 @@ class InstructionImpl<
       let currentValue: any = v;
       let currentContext: any = c;
 
+      // Get full steps array (may require building from parent)
+      const steps = this.getSteps();
+
       // Execute steps sequentially, passing current value and context
-      for (const step of this.steps) {
+      for (const step of steps) {
         const [result, newContext] = await step(currentValue, currentContext);
         if (result.err !== undefined) {
           return this.failure(result.err);
