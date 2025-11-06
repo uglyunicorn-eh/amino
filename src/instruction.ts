@@ -215,7 +215,7 @@ class InstructionImpl<
 
   run(...args: IV extends undefined ? [] : [IV]): AsyncResult<V, E> {
     // When IV is undefined, args is empty; otherwise args[0] is the value
-    const value = (args[0] ?? undefined) as IV;
+    const value = args[0] as IV;
     return this.compile()(value as any);
   }
 
@@ -239,8 +239,12 @@ class InstructionImpl<
         this._parent
       ) as Instruction<IV, IC, V, C, Error>;
     } else {
+      if (message == null) {
+        throw new Error('message is required when using custom error class');
+      }
+      
       const errorTransformer: ErrorTransformer<NE> = (originalError: Error): NE =>
-        new (errorClassOrMessage as ErrorFactory<NE>)(message!, {
+        new (errorClassOrMessage as ErrorFactory<NE>)(message, {
           cause: originalError,
         }) as unknown as NE;
 
@@ -267,25 +271,7 @@ class InstructionImpl<
     };
 
     // Use structural sharing for branching
-    // If we have a parent, only store new steps (efficient branching)
-    // Otherwise, copy array and append new step (linear chain)
-    if (this._parent) {
-      // Branching: only store the new step, reference parent
-      return new InstructionImpl<IV, IC, NV, C, E>(
-        this.initialContext,
-        [newStep],
-        this.errorTransformer,
-        this
-      );
-    } else {
-      // Linear chain: copy and append
-      const newSteps = [...this.steps, newStep];
-      return new InstructionImpl<IV, IC, NV, C, E>(
-        this.initialContext,
-        newSteps,
-        this.errorTransformer
-      );
-    }
+    return this.createChildInstruction<NV, C>(newStep);
   }
 
   assert(
@@ -309,22 +295,7 @@ class InstructionImpl<
     };
 
     // Use structural sharing for branching
-    if (this._parent) {
-      // Branching: only store the new step, reference parent
-      return new InstructionImpl<IV, IC, V, C, E>(
-        this.initialContext,
-        [newStep],
-        this.errorTransformer,
-        this
-      );
-    } else {
-      const newSteps = [...this.steps, newStep];
-      return new InstructionImpl<IV, IC, V, C, E>(
-        this.initialContext,
-        newSteps,
-        this.errorTransformer
-      );
-    }
+    return this.createChildInstruction<V, C>(newStep);
   }
 
   context<NC>(fn: ContextFunction<C, V, NC>): Instruction<IV, IC, V, NC, E> {
@@ -342,17 +313,31 @@ class InstructionImpl<
     };
 
     // Use structural sharing for branching
+    return this.createChildInstruction<V, NC>(newStep);
+  }
+
+  /**
+   * Create a child instruction with structural sharing for efficient branching
+   * @param newStep - The step to add
+   * @returns New instruction instance
+   */
+  private createChildInstruction<NV, NC>(
+    newStep: StepIteration<V, C, NV, NC, E>
+  ): InstructionImpl<IV, IC, NV, NC, E> {
+    // If we have a parent, only store new steps (efficient branching)
+    // Otherwise, copy array and append new step (linear chain)
     if (this._parent) {
       // Branching: only store the new step, reference parent
-      return new InstructionImpl<IV, IC, V, NC, E>(
+      return new InstructionImpl<IV, IC, NV, NC, E>(
         this.initialContext,
         [newStep],
         this.errorTransformer,
         this
       );
     } else {
+      // Linear chain: copy and append
       const newSteps = [...this.steps, newStep];
-      return new InstructionImpl<IV, IC, V, NC, E>(
+      return new InstructionImpl<IV, IC, NV, NC, E>(
         this.initialContext,
         newSteps,
         this.errorTransformer

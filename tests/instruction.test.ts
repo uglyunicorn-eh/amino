@@ -363,7 +363,7 @@ describe('Instruction Pipeline', () => {
     const initialContext = { base: 0 };
     const instr = instruction<number, { base: number }>(initialContext)
       .step(async (v: number) => {
-        throw 'String error';
+        throw new Error('String error');
       });
 
     const result = await instr.run(5);
