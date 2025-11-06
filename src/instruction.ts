@@ -239,7 +239,7 @@ class InstructionImpl<
         this._parent
       ) as Instruction<IV, IC, V, C, Error>;
     } else {
-      if (message == null) {
+      if (message === undefined) {
         throw new Error('message is required when using custom error class');
       }
       
