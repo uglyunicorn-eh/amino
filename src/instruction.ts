@@ -123,18 +123,7 @@ export interface Instruction<
 }
 
 /**
- * Instruction node - represents a single step in the backward-linked list
- */
-class InstructionNode {
-  constructor(
-    public readonly step: StepIteration<any, any, any, any, any>,
-    public readonly prev: InstructionNode | null
-  ) {}
-}
-
-
-/**
- * Internal instruction implementation class with immutable linked list
+ * Internal instruction implementation class with immutable array storage
  */
 class InstructionImpl<
   IV = undefined,
@@ -143,28 +132,25 @@ class InstructionImpl<
   C = undefined,
   E extends Error = Error,
 > implements Instruction<IV, IC, V, C, E> {
-  private readonly last: InstructionNode | null;
+  private readonly steps: StepIteration<any, any, any, any, any>[];
   private readonly initialContext: IC;
   private readonly errorTransformer?: ErrorTransformer<E>;
-  private _compiledSteps: StepIteration<any, any, any, any, any>[] | null =
-    null;
 
   constructor(
     initialContext: IC,
-    last: InstructionNode | null = null,
+    steps: StepIteration<any, any, any, any, any>[] = [],
     errorTransformer?: ErrorTransformer<E>
   ) {
     this.initialContext = initialContext;
-    this.last = last;
+    this.steps = steps;
     this.errorTransformer = errorTransformer;
   }
 
   compile(overwriteContext?: IC): CompiledPipeline<IV, V, E> {
     const boundContext = (overwriteContext ?? this.initialContext) as IC;
-    const steps = this.compileSteps();
 
     return async (v: IV): Promise<Result<V, E>> => {
-      const result = await this.executeSteps(v, boundContext, steps);
+      const result = await this.executeSteps(v, boundContext);
       return result;
     };
   }
@@ -188,7 +174,7 @@ class InstructionImpl<
       
       return new InstructionImpl<IV, IC, V, C, Error>(
         this.initialContext,
-        this.last,
+        this.steps,
         errorTransformer
       ) as Instruction<IV, IC, V, C, Error>;
     } else {
@@ -199,7 +185,7 @@ class InstructionImpl<
 
       return new InstructionImpl<IV, IC, V, C, NE>(
         this.initialContext,
-        this.last,
+        this.steps,
         errorTransformer
       ) as Instruction<IV, IC, V, C, NE>;
     }
@@ -218,10 +204,11 @@ class InstructionImpl<
       return [resolved as Result<NV, E>, c];
     };
 
-    const newNode = new InstructionNode(newStep, this.last);
+    // Copy array and append new step (immutable)
+    const newSteps = [...this.steps, newStep];
     return new InstructionImpl<IV, IC, NV, C, E>(
       this.initialContext,
-      newNode,
+      newSteps,
       this.errorTransformer
     );
   }
@@ -246,10 +233,11 @@ class InstructionImpl<
       return [ok(v), c];
     };
 
-    const newNode = new InstructionNode(newStep, this.last);
+    // Copy array and append new step (immutable)
+    const newSteps = [...this.steps, newStep];
     return new InstructionImpl<IV, IC, V, C, E>(
       this.initialContext,
-      newNode,
+      newSteps,
       this.errorTransformer
     );
   }
@@ -268,49 +256,25 @@ class InstructionImpl<
       return [ok(v), resolvedContext];
     };
 
-    const newNode = new InstructionNode(newStep, this.last);
+    // Copy array and append new step (immutable)
+    const newSteps = [...this.steps, newStep];
     return new InstructionImpl<IV, IC, V, NC, E>(
       this.initialContext,
-      newNode,
+      newSteps,
       this.errorTransformer
     );
   }
 
-  private compileSteps(): StepIteration<any, any, any, any, any>[] {
-    if (this._compiledSteps) {
-      return this._compiledSteps;
-    }
-
-    if (!this.last) {
-      this._compiledSteps = [];
-      return [];
-    }
-
-    // Traverse backward-linked list to build array
-    const steps: StepIteration<any, any, any, any, any>[] = [];
-    let node: InstructionNode | null = this.last;
-    while (node) {
-      steps.push(node.step);
-      node = node.prev;
-    }
-    // Reverse to get execution order (oldest first)
-    steps.reverse();
-
-    this._compiledSteps = steps;
-    return steps;
-  }
-
   private async executeSteps(
     v: IV,
-    c: IC,
-    steps: StepIteration<any, any, any, any, any>[]
+    c: IC
   ): Promise<Result<V, E>> {
     try {
       let currentValue: any = v;
       let currentContext: any = c;
 
       // Execute steps sequentially, passing current value and context
-      for (const step of steps) {
+      for (const step of this.steps) {
         const [result, newContext] = await step(currentValue, currentContext);
         if (result.err !== undefined) {
           return this.failure(result.err);
