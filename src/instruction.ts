@@ -51,6 +51,13 @@ type StepIteration<V, C, NV, NC, E extends Error = Error> = (
 
 type ErrorTransformer<E> = (originalError: Error) => E;
 
+/**
+ * Computes the updated result type when value type changes from V to NV
+ * If R is the default Result<V>, it becomes Result<NV>
+ * If R is a custom type (from useResult), it is preserved
+ */
+type UpdatedResultType<R, V, NV> = R extends Result<V> ? Result<NV> : R;
+
 type CompiledPipeline<IV, V, E extends Error = Error> = IV extends undefined
   ? (v?: IV) => AsyncResult<V, E>
   : (v: IV) => AsyncResult<V, E>;
@@ -114,29 +121,33 @@ export interface Instruction<
   /**
    * Add a processing step to the pipeline
    * @param fn - Step function that transforms the value
-   * @returns New instruction with updated value type and result type Result<NV>
+   * @returns New instruction with updated value type
+   * If R is the default Result<V>, it becomes Result<NV>
+   * If R is a custom type (from useResult), it is preserved
    */
   step<NV, SE extends Error = Error>(
     fn: StepFunction<V, C, NV, SE>
-  ): Instruction<IV, IC, NV, C, E, Result<NV>>;
+  ): Instruction<IV, IC, NV, C, E, UpdatedResultType<R, V, NV>>;
 
   /**
    * Add an assertion/validation step that doesn't transform the value
    * @param predicate - Predicate function that returns true if assertion passes
    * @param message - Optional error message if assertion fails
    * @returns New instruction with same value type (no transformation)
+   * R type is preserved (custom type from useResult or default Result<V>)
    */
   assert(
     predicate: AssertFunction<V, C>,
     message?: string
-  ): Instruction<IV, IC, V, C, E, Result<V>>;
+  ): Instruction<IV, IC, V, C, E, R>;
 
   /**
    * Add a context transformation step to the pipeline
    * @param fn - Context function that transforms the context
    * @returns New instruction with updated context type
+   * R type is preserved (custom type from useResult or default Result<V>)
    */
-  context<NC>(fn: ContextFunction<C, V, NC>): Instruction<IV, IC, V, NC, E, Result<V>>;
+  context<NC>(fn: ContextFunction<C, V, NC>): Instruction<IV, IC, V, NC, E, R>;
 
   /**
    * Unwrap the result and transform it to any type
@@ -248,13 +259,7 @@ class InstructionImpl<
       const errorTransformer: ErrorTransformer<Error> = (originalError: Error) =>
         new Error(errorClassOrMessage, { cause: originalError });
       
-      return new InstructionImpl<IV, IC, V, C, Error, R>(
-        this.initialContext,
-        this.steps,
-        errorTransformer,
-        this._parent,
-        this._useResultFn as any
-      ) as Instruction<IV, IC, V, C, Error, R>;
+      return this.createInstructionWithErrorType<Error>(errorTransformer);
     } else {
       if (message === undefined) {
         throw new Error('message is required when using custom error class');
@@ -267,19 +272,13 @@ class InstructionImpl<
           cause: originalError,
         }) as unknown as NE;
 
-      return new InstructionImpl<IV, IC, V, C, NE, R>(
-        this.initialContext,
-        this.steps,
-        errorTransformer,
-        this._parent,
-        this._useResultFn as any
-      ) as Instruction<IV, IC, V, C, NE, R>;
+      return this.createInstructionWithErrorType<NE>(errorTransformer);
     }
   }
 
   step<NV, SE extends Error = Error>(
     fn: StepFunction<V, C, NV, SE>
-  ): Instruction<IV, IC, NV, C, E, Result<NV>> {
+  ): Instruction<IV, IC, NV, C, E, UpdatedResultType<R, V, NV>> {
     const newStep: StepIteration<V, C, NV, C, E> = async (
       v: V,
       c: C
@@ -295,7 +294,7 @@ class InstructionImpl<
   assert(
     predicate: AssertFunction<V, C>,
     message?: string
-  ): Instruction<IV, IC, V, C, E, Result<V>> {
+  ): Instruction<IV, IC, V, C, E, R> {
     const newStep: StepIteration<V, C, V, C, E> = async (
       v: V,
       c: C
@@ -311,10 +310,11 @@ class InstructionImpl<
       return [ok(v), c];
     };
 
-    return this.createChildInstruction<V, C>(newStep);
+    // For assert, V doesn't change, so we preserve R type
+    return this.createInstructionWithPreservedR<V, C>(newStep);
   }
 
-  context<NC>(fn: ContextFunction<C, V, NC>): Instruction<IV, IC, V, NC, E, Result<V>> {
+  context<NC>(fn: ContextFunction<C, V, NC>): Instruction<IV, IC, V, NC, E, R> {
     const newStep: StepIteration<V, C, V, NC, E> = async (
       v: V,
       c: C
@@ -327,7 +327,8 @@ class InstructionImpl<
       return [ok(v), resolvedContext];
     };
 
-    return this.createChildInstruction<V, NC>(newStep);
+    // For context, V doesn't change, so we preserve R type
+    return this.createInstructionWithPreservedR<V, NC>(newStep);
   }
 
   useResult<RR>(
@@ -349,27 +350,56 @@ class InstructionImpl<
    */
   private createChildInstruction<NV, NC>(
     newStep: StepIteration<V, C, NV, NC, E>
-  ): InstructionImpl<IV, IC, NV, NC, E, Result<NV>> {
-    // When step is called, R is reset to Result<NV> (the default for the new value type)
-    // This ensures type inference works correctly through the chain
-    if (this._parent) {
-      return new InstructionImpl<IV, IC, NV, NC, E, Result<NV>>(
-        this.initialContext,
-        [newStep],
-        this.errorTransformer,
-        this,
-        undefined // Clear useResultFn since R is reset to default
-      );
-    } else {
-      const newSteps = [...this.steps, newStep];
-      return new InstructionImpl<IV, IC, NV, NC, E, Result<NV>>(
-        this.initialContext,
-        newSteps,
-        this.errorTransformer,
-        undefined,
-        undefined // Clear useResultFn since R is reset to default
-      );
-    }
+  ): InstructionImpl<IV, IC, NV, NC, E, UpdatedResultType<R, V, NV>> {
+    // If R is the default Result<V>, update it to Result<NV> when value type changes
+    // If R is a custom type (from useResult), preserve it
+    const steps = this._parent ? [newStep] : [...this.steps, newStep];
+    const parent = this._parent ? this : undefined;
+    
+    return new InstructionImpl<IV, IC, NV, NC, E, UpdatedResultType<R, V, NV>>(
+      this.initialContext,
+      steps,
+      this.errorTransformer,
+      parent,
+      this._useResultFn as any // Preserve useResultFn if R is custom type
+    ) as InstructionImpl<IV, IC, NV, NC, E, UpdatedResultType<R, V, NV>>;
+  }
+
+  /**
+   * Create a new instruction with preserved R type (for assert and context)
+   * @param newStep - The step to add
+   * @returns New instruction instance with same R type
+   */
+  private createInstructionWithPreservedR<NV, NC>(
+    newStep: StepIteration<V, C, NV, NC, E>
+  ): InstructionImpl<IV, IC, NV, NC, E, R> {
+    const steps = this._parent ? [newStep] : [...this.steps, newStep];
+    const parent = this._parent ? this : undefined;
+    
+    return new InstructionImpl<IV, IC, NV, NC, E, R>(
+      this.initialContext,
+      steps,
+      this.errorTransformer,
+      parent,
+      this._useResultFn as any // Preserve useResultFn
+    ) as InstructionImpl<IV, IC, NV, NC, E, R>;
+  }
+
+  /**
+   * Create a new instruction with updated error type but preserved R type (for failsWith)
+   * @param errorTransformer - Error transformer function
+   * @returns New instruction instance with updated error type
+   */
+  private createInstructionWithErrorType<NE extends Error>(
+    errorTransformer: ErrorTransformer<NE>
+  ): InstructionImpl<IV, IC, V, C, NE, R> {
+    return new InstructionImpl<IV, IC, V, C, NE, R>(
+      this.initialContext,
+      this.steps,
+      errorTransformer,
+      this._parent,
+      this._useResultFn as any // Preserve useResultFn
+    ) as InstructionImpl<IV, IC, V, C, NE, R>;
   }
 
   private async executeSteps(

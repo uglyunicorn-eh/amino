@@ -606,6 +606,39 @@ describe('Instruction Pipeline', () => {
       expect(result).toBe(2); // "42".length === 2
       expect(typeof result).toBe('number');
     });
+
+    test('useResult followed by step preserves unwrapped type', async () => {
+      const initialContext = { base: 0 };
+      const instr = instruction<number, { base: number }>(initialContext)
+        .useResult(async (v: number, ctx: { base: number }) => v) // Unwrap to number
+        .step(async (v: number, ctx: { base: number }) => ok(ctx.base + v)); // Transform number -> number
+
+      const result = await instr.run(1);
+
+      // Result should still be unwrapped number, not Result<number>
+      expect(result).toBe(1); // Unwrapped value, not Result
+      expect(typeof result).toBe('number');
+      // Verify it's not a Result object
+      expect(result).not.toHaveProperty('res');
+      expect(result).not.toHaveProperty('err');
+    });
+
+    test('useResult with assert and context preserves unwrapped type', async () => {
+      const initialContext = { base: 0 };
+      const instr = instruction<number, { base: number }>(initialContext)
+        .step(async (v: number) => ok(v * 2)) // number -> number
+        .useResult((v: number) => v.toString()) // Unwrap to string
+        .assert((v: number) => v > 0, 'Value must be positive') // Assert preserves R
+        .context((ctx: { base: number }, v: number) => ({ ...ctx, base: ctx.base + v })); // Context preserves R
+
+      const result = await instr.run(5);
+
+      // Result should still be unwrapped string (from useResult), not Result<string>
+      expect(result).toBe('10'); // Unwrapped string
+      expect(typeof result).toBe('string');
+      expect(result).not.toHaveProperty('res');
+      expect(result).not.toHaveProperty('err');
+    });
   });
 });
 
