@@ -91,6 +91,26 @@ instruction<number>()
   .step(async (v: number) => err('Step failed'));
 ```
 
+**Unwrap Result** - Transform result to any type:
+```typescript
+// Unwrap Result to get the value directly
+const instr = instruction<number>()
+  .step(async (v: number) => ok(v * 2))
+  .useResult((v: number) => v.toString());
+
+const result = await instr.run(5);
+// result === "10" (string, not Result<string>)
+
+// Can be used in the middle of a chain
+const instr2 = instruction<number, { base: number }>({ base: 0 })
+  .step(async (v: number) => ok(v * 2))
+  .useResult((v: number, ctx) => v) // Unwrap to number
+  .step(async (v: number, ctx) => ok(ctx.base + v)); // Still works!
+
+const result2 = await instr2.run(5);
+// result2 === 10 (number, unwrapped type preserved)
+```
+
 **Compile** - For better performance:
 ```typescript
 const compiled = instruction<number, { base: number }>({ base: 10 })
@@ -109,8 +129,9 @@ const result = await compiled(5);
 - `.context(fn)` - Transform context
 - `.assert(predicate, message?)` - Validate
 - `.failsWith(ErrorClass, message)` - Custom error
-- `.compile(context?)` - Compile pipeline
-- `.run(value?)` - Execute pipeline
+- `.useResult(fn)` - Unwrap result and transform to any type
+- `.compile(context?)` - Compile pipeline (returns `AsyncResult<V, E>`)
+- `.run(value?)` - Execute pipeline (returns `Promise<R>` where `R` defaults to `Result<V>`)
 
 ## License
 
