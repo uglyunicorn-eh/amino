@@ -62,6 +62,7 @@ type CompiledPipeline<IV, V, E extends Error = Error> = IV extends undefined
  * @param V - Current Value type (transforms through pipeline)
  * @param C - Current Context type (transforms through pipeline)
  * @param E - Error type (must extend Error)
+ * @param R - Result type (defaults to Result<V>, can be changed by useResult)
  */
 export interface Instruction<
   IV = undefined,
@@ -69,6 +70,7 @@ export interface Instruction<
   V = undefined,
   C = undefined,
   E extends Error = Error,
+  R = Result<V>,
 > {
   /**
    * Compile the pipeline with context override
@@ -87,9 +89,9 @@ export interface Instruction<
    * Run the pipeline with a value (uses initial context)
    * When IV is undefined, the value parameter is optional
    * @param v - Initial value to process (optional when IV is undefined)
-   * @returns Result of the pipeline execution
+   * @returns Result of the pipeline execution (Promise<R> where R defaults to Result<V>)
    */
-  run(...args: IV extends undefined ? [] : [IV]): AsyncResult<V, E>;
+  run(...args: IV extends undefined ? [] : [IV]): Promise<R>;
 
   /**
    * Set error transformation for the instruction with custom error class
@@ -100,23 +102,23 @@ export interface Instruction<
   failsWith<NE extends Error>(
     errorClass: ErrorFactory<NE>,
     message: string
-  ): Instruction<IV, IC, V, C, NE>;
+  ): Instruction<IV, IC, V, C, NE, R>;
 
   /**
    * Set error transformation for the instruction with generic error
    * @param message - Error message string
    * @returns New instruction with updated error type
    */
-  failsWith(message: string): Instruction<IV, IC, V, C, Error>;
+  failsWith(message: string): Instruction<IV, IC, V, C, Error, R>;
 
   /**
    * Add a processing step to the pipeline
    * @param fn - Step function that transforms the value
-   * @returns New instruction with updated value type
+   * @returns New instruction with updated value type and result type Result<NV>
    */
   step<NV, SE extends Error = Error>(
     fn: StepFunction<V, C, NV, SE>
-  ): Instruction<IV, IC, NV, C, E>;
+  ): Instruction<IV, IC, NV, C, E, Result<NV>>;
 
   /**
    * Add an assertion/validation step that doesn't transform the value
@@ -127,14 +129,23 @@ export interface Instruction<
   assert(
     predicate: AssertFunction<V, C>,
     message?: string
-  ): Instruction<IV, IC, V, C, E>;
+  ): Instruction<IV, IC, V, C, E, Result<V>>;
 
   /**
    * Add a context transformation step to the pipeline
    * @param fn - Context function that transforms the context
    * @returns New instruction with updated context type
    */
-  context<NC>(fn: ContextFunction<C, V, NC>): Instruction<IV, IC, V, NC, E>;
+  context<NC>(fn: ContextFunction<C, V, NC>): Instruction<IV, IC, V, NC, E, Result<V>>;
+
+  /**
+   * Unwrap the result and transform it to any type
+   * @param fn - Function that receives unwrapped value and context, returns any type
+   * @returns New instruction with updated result type R = RR
+   */
+  useResult<RR>(
+    fn: (v: V, ci: C) => RR | Promise<RR>
+  ): Instruction<IV, IC, V, C, E, RR>;
 }
 
 /**
@@ -147,23 +158,27 @@ class InstructionImpl<
   V = undefined,
   C = undefined,
   E extends Error = Error,
-> implements Instruction<IV, IC, V, C, E> {
+  R = Result<V>,
+> implements Instruction<IV, IC, V, C, E, R> {
   private readonly steps: StepIteration<any, any, any, any, any>[];
   private readonly initialContext: IC;
   private readonly errorTransformer?: ErrorTransformer<E>;
-  private readonly _parent?: InstructionImpl<any, any, any, any, any>;
+  private readonly _parent?: InstructionImpl<any, any, any, any, any, any>;
   private _cachedSteps: StepIteration<any, any, any, any, any>[] | null = null;
+  private readonly _useResultFn?: (v: V, c: C) => R | Promise<R>;
 
   constructor(
     initialContext: IC,
     steps: StepIteration<any, any, any, any, any>[] = [],
     errorTransformer?: ErrorTransformer<E>,
-    parent?: InstructionImpl<any, any, any, any, any>
+    parent?: InstructionImpl<any, any, any, any, any, any>,
+    useResultFn?: (v: V, c: C) => R | Promise<R>
   ) {
     this.initialContext = initialContext;
     this.steps = steps;
     this.errorTransformer = errorTransformer;
     this._parent = parent;
+    this._useResultFn = useResultFn;
   }
 
   /**
@@ -198,31 +213,48 @@ class InstructionImpl<
     }) as CompiledPipeline<IV, V, E>;
   }
 
-  run(...args: IV extends undefined ? [] : [IV]): AsyncResult<V, E> {
+  run(...args: IV extends undefined ? [] : [IV]): Promise<R> {
     const value = args[0] as IV;
-    // Type assertion needed due to conditional type complexity in CompiledPipeline
-    return this.compile()(value as any);
+    
+    if (this._useResultFn) {
+      // If useResult was called, execute pipeline, unwrap, and call the function
+      return (async () => {
+        const [result, finalContext] = await this.executeStepsWithContext(value, this.initialContext);
+        if (result.err !== undefined) {
+          throw result.err;
+        }
+        // _useResultFn is guaranteed to be defined here due to the if check above
+        const fnResult = this._useResultFn!(result.res as V, finalContext as C);
+        return isPromiseLike(fnResult) ? await fnResult : fnResult;
+      })() as Promise<R>;
+    }
+    
+    // Default behavior: return Result<V, E>
+    // Since R defaults to Result<V>, this should match Promise<R>
+    const compiled = this.compile();
+    return compiled(value) as Promise<R>;
   }
 
   failsWith<NE extends Error>(
     errorClass: ErrorFactory<NE>,
     message: string
-  ): Instruction<IV, IC, V, C, NE>;
-  failsWith(message: string): Instruction<IV, IC, V, C, Error>;
+  ): Instruction<IV, IC, V, C, NE, R>;
+  failsWith(message: string): Instruction<IV, IC, V, C, Error, R>;
   failsWith<NE extends Error>(
     errorClassOrMessage: ErrorFactory<NE> | string,
     message?: string
-  ): Instruction<IV, IC, V, C, NE> | Instruction<IV, IC, V, C, Error> {
+  ): Instruction<IV, IC, V, C, NE, R> | Instruction<IV, IC, V, C, Error, R> {
     if (typeof errorClassOrMessage === 'string') {
       const errorTransformer: ErrorTransformer<Error> = (originalError: Error) =>
         new Error(errorClassOrMessage, { cause: originalError });
       
-      return new InstructionImpl<IV, IC, V, C, Error>(
+      return new InstructionImpl<IV, IC, V, C, Error, R>(
         this.initialContext,
         this.steps,
         errorTransformer,
-        this._parent
-      ) as Instruction<IV, IC, V, C, Error>;
+        this._parent,
+        this._useResultFn as any
+      ) as Instruction<IV, IC, V, C, Error, R>;
     } else {
       if (message === undefined) {
         throw new Error('message is required when using custom error class');
@@ -235,18 +267,19 @@ class InstructionImpl<
           cause: originalError,
         }) as unknown as NE;
 
-      return new InstructionImpl<IV, IC, V, C, NE>(
+      return new InstructionImpl<IV, IC, V, C, NE, R>(
         this.initialContext,
         this.steps,
         errorTransformer,
-        this._parent
-      ) as Instruction<IV, IC, V, C, NE>;
+        this._parent,
+        this._useResultFn as any
+      ) as Instruction<IV, IC, V, C, NE, R>;
     }
   }
 
   step<NV, SE extends Error = Error>(
     fn: StepFunction<V, C, NV, SE>
-  ): Instruction<IV, IC, NV, C, E> {
+  ): Instruction<IV, IC, NV, C, E, Result<NV>> {
     const newStep: StepIteration<V, C, NV, C, E> = async (
       v: V,
       c: C
@@ -262,7 +295,7 @@ class InstructionImpl<
   assert(
     predicate: AssertFunction<V, C>,
     message?: string
-  ): Instruction<IV, IC, V, C, E> {
+  ): Instruction<IV, IC, V, C, E, Result<V>> {
     const newStep: StepIteration<V, C, V, C, E> = async (
       v: V,
       c: C
@@ -281,7 +314,7 @@ class InstructionImpl<
     return this.createChildInstruction<V, C>(newStep);
   }
 
-  context<NC>(fn: ContextFunction<C, V, NC>): Instruction<IV, IC, V, NC, E> {
+  context<NC>(fn: ContextFunction<C, V, NC>): Instruction<IV, IC, V, NC, E, Result<V>> {
     const newStep: StepIteration<V, C, V, NC, E> = async (
       v: V,
       c: C
@@ -297,6 +330,18 @@ class InstructionImpl<
     return this.createChildInstruction<V, NC>(newStep);
   }
 
+  useResult<RR>(
+    fn: (v: V, ci: C) => RR | Promise<RR>
+  ): Instruction<IV, IC, V, C, E, RR> {
+    return new InstructionImpl<IV, IC, V, C, E, RR>(
+      this.initialContext,
+      this.steps,
+      this.errorTransformer,
+      this._parent,
+      fn as any
+    ) as Instruction<IV, IC, V, C, E, RR>;
+  }
+
   /**
    * Create a child instruction with structural sharing for efficient branching
    * @param newStep - The step to add
@@ -304,20 +349,25 @@ class InstructionImpl<
    */
   private createChildInstruction<NV, NC>(
     newStep: StepIteration<V, C, NV, NC, E>
-  ): InstructionImpl<IV, IC, NV, NC, E> {
+  ): InstructionImpl<IV, IC, NV, NC, E, Result<NV>> {
+    // When step is called, R is reset to Result<NV> (the default for the new value type)
+    // This ensures type inference works correctly through the chain
     if (this._parent) {
-      return new InstructionImpl<IV, IC, NV, NC, E>(
+      return new InstructionImpl<IV, IC, NV, NC, E, Result<NV>>(
         this.initialContext,
         [newStep],
         this.errorTransformer,
-        this
+        this,
+        undefined // Clear useResultFn since R is reset to default
       );
     } else {
       const newSteps = [...this.steps, newStep];
-      return new InstructionImpl<IV, IC, NV, NC, E>(
+      return new InstructionImpl<IV, IC, NV, NC, E, Result<NV>>(
         this.initialContext,
         newSteps,
-        this.errorTransformer
+        this.errorTransformer,
+        undefined,
+        undefined // Clear useResultFn since R is reset to default
       );
     }
   }
@@ -326,6 +376,14 @@ class InstructionImpl<
     v: IV,
     c: IC
   ): Promise<Result<V, E>> {
+    const [result, _] = await this.executeStepsWithContext(v, c);
+    return result;
+  }
+
+  private async executeStepsWithContext(
+    v: IV,
+    c: IC
+  ): Promise<[Result<V, E>, C]> {
     try {
       let currentValue: any = v;
       let currentContext: any = c;
@@ -335,15 +393,15 @@ class InstructionImpl<
       for (const step of steps) {
         const [result, newContext] = await step(currentValue, currentContext);
         if (result.err !== undefined) {
-          return this.failure(result.err);
+          return [this.failure(result.err), currentContext];
         }
         currentValue = result.res;
         currentContext = newContext;
       }
 
-      return ok(currentValue);
+      return [ok(currentValue), currentContext];
     } catch (error) {
-      return this.failure(error);
+      return [this.failure(error), c as unknown as C];
     }
   }
 
@@ -367,7 +425,7 @@ class InstructionImpl<
  * Note: When IV is undefined, the initial value is optional when calling run() or compile()
  * When IV is specified, the first step receives IV as the value type
  */
-export function instruction<IV = undefined>(): Instruction<IV, undefined, IV extends undefined ? undefined : IV, undefined, Error>;
+export function instruction<IV = undefined>(): Instruction<IV, undefined, IV extends undefined ? undefined : IV, undefined, Error, Result<IV extends undefined ? undefined : IV>>;
 
 /**
  * Create a new instruction with initial context
@@ -382,7 +440,7 @@ export function instruction<IV = undefined>(): Instruction<IV, undefined, IV ext
  */
 export function instruction<IV = undefined, IC = undefined>(
   initialContext: IC
-): Instruction<IV, IC, IV extends undefined ? undefined : IV, IC, Error>;
+): Instruction<IV, IC, IV extends undefined ? undefined : IV, IC, Error, Result<IV extends undefined ? undefined : IV>>;
 
 /**
  * Create a new instruction with optional initial context
@@ -391,8 +449,8 @@ export function instruction<IV = undefined, IC = undefined>(
  */
 export function instruction<IV = undefined, IC = undefined>(
   initialContext?: IC
-): Instruction<IV, IC, IV extends undefined ? undefined : IV, IC, Error> {
+): Instruction<IV, IC, IV extends undefined ? undefined : IV, IC, Error, Result<IV extends undefined ? undefined : IV>> {
   type InitialV = IV extends undefined ? undefined : IV;
-  return new InstructionImpl<IV, IC, InitialV, IC, Error>(initialContext as IC);
+  return new InstructionImpl<IV, IC, InitialV, IC, Error, Result<InitialV>>(initialContext as IC);
 }
 

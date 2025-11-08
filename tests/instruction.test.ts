@@ -453,5 +453,159 @@ describe('Instruction Pipeline', () => {
     expect(result2.err).toBeDefined();
     expect(result2.err?.message).toBe('Value out of range');
   });
+
+  describe('useResult', () => {
+    test('useResult unwraps result and transforms return type', async () => {
+      const initialContext = { base: 0 };
+      const instr = instruction<number, { base: number }>(initialContext)
+        .step(async (v: number) => ok(v * 2))
+        .useResult(async (v: number) => v.toString());
+
+      const result = await instr.run(5);
+
+      expect(result).toBe('10'); // Unwrapped string, not Result
+      expect(typeof result).toBe('string');
+    });
+
+    test('useResult with sync function', async () => {
+      const initialContext = { base: 0 };
+      const instr = instruction<number, { base: number }>(initialContext)
+        .step(async (v: number) => ok(v * 2))
+        .useResult((v: number) => v + 1);
+
+      const result = await instr.run(5);
+
+      expect(result).toBe(11); // Unwrapped number
+      expect(typeof result).toBe('number');
+    });
+
+    test('useResult receives context', async () => {
+      const initialContext = { base: 10 };
+      const instr = instruction<number, { base: number }>(initialContext)
+        .step(async (v: number) => ok(v * 2))
+        .context((ctx: { base: number }, v: number) => ({ ...ctx, base: ctx.base + v }))
+        .useResult((v: number, ctx: { base: number }) => v + ctx.base);
+
+      const result = await instr.run(5);
+
+      // v = 10 (5 * 2), ctx.base = 10 + 10 = 20, result = 10 + 20 = 30
+      expect(result).toBe(30);
+    });
+
+    test('useResult throws error when pipeline fails', async () => {
+      const initialContext = { base: 0 };
+      const instr = instruction<number, { base: number }>(initialContext)
+        .step<number, Error>(async (v: number) => err(new Error('Step failed')))
+        .useResult((v: number) => v.toString());
+
+      await expect(instr.run(5)).rejects.toThrow('Step failed');
+    });
+
+    test('useResult throws error when assertion fails', async () => {
+      const initialContext = { base: 0 };
+      const instr = instruction<number, { base: number }>(initialContext)
+        .step(async (v: number) => ok(v * 2))
+        .assert((v: number) => v === 0, 'Value must be zero')
+        .useResult((v: number) => v.toString());
+
+      await expect(instr.run(5)).rejects.toThrow('Value must be zero');
+    });
+
+    test('useResult with different return types', async () => {
+      const initialContext = { base: 0 };
+      
+      const instr1 = instruction<number, { base: number }>(initialContext)
+        .step(async (v: number) => ok(v * 2))
+        .useResult((v: number) => ({ value: v, doubled: true }));
+
+      const result1 = await instr1.run(5);
+      expect(result1).toEqual({ value: 10, doubled: true });
+
+      const instr2 = instruction<number, { base: number }>(initialContext)
+        .step(async (v: number) => ok(v * 2))
+        .useResult((v: number) => [v, v * 2]);
+
+      const result2 = await instr2.run(5);
+      expect(result2).toEqual([10, 20]);
+    });
+
+    test('compile still returns AsyncResult after useResult', async () => {
+      const initialContext = { base: 0 };
+      const instr = instruction<number, { base: number }>(initialContext)
+        .step(async (v: number) => ok(v * 2))
+        .useResult((v: number) => v.toString());
+
+      const compiled = instr.compile();
+      const result = await compiled(5);
+
+      // compile() should still return Result, not unwrapped
+      expect(result.err).toBeUndefined();
+      expect(result.res).toBe(10); // Number, not string
+      expect(typeof result.res).toBe('number');
+    });
+
+    test('useResult with async function', async () => {
+      const initialContext = { base: 0 };
+      const instr = instruction<number, { base: number }>(initialContext)
+        .step(async (v: number) => ok(v * 2))
+        .useResult(async (v: number) => {
+          await new Promise(resolve => setTimeout(resolve, 10));
+          return v.toString();
+        });
+
+      const result = await instr.run(5);
+
+      expect(result).toBe('10');
+      expect(typeof result).toBe('string');
+    });
+
+    test('useResult preserves error transformation', async () => {
+      class CustomError extends Error {
+        constructor(message: string, options?: { cause?: Error }) {
+          super(message, options);
+        }
+      }
+
+      const initialContext = { base: 0 };
+      const instr = instruction<number, { base: number }>(initialContext)
+        .failsWith(CustomError, 'Custom error')
+        .step<number, Error>(async (v: number) => err(new Error('Step failed')))
+        .useResult((v: number) => v.toString());
+
+      await expect(instr.run(5)).rejects.toThrow(CustomError);
+      try {
+        await instr.run(5);
+      } catch (error) {
+        expect(error).toBeInstanceOf(CustomError);
+        expect((error as CustomError).message).toBe('Custom error');
+      }
+    });
+
+    test('useResult can be chained with other methods before it', async () => {
+      const initialContext = { base: 0 };
+      const instr = instruction<number, { base: number }>(initialContext)
+        .step(async (v: number) => ok(v * 2))
+        .assert((v: number) => v > 0, 'Value must be positive')
+        .context((ctx: { base: number }, v: number) => ({ ...ctx, base: ctx.base + v }))
+        .useResult((v: number, ctx: { base: number }) => v + ctx.base);
+
+      const result = await instr.run(5);
+
+      // v = 10 (5 * 2), ctx.base = 0 + 10 = 10, result = 10 + 10 = 20
+      expect(result).toBe(20);
+    });
+
+    test('type inference through useResult', async () => {
+      const initialContext = { base: 0 };
+      const instr = instruction<number, { base: number }>(initialContext)
+        .step(async (v: number) => ok(v.toString())) // number -> string
+        .useResult((v: string) => v.length); // string -> number
+
+      const result = await instr.run(42);
+
+      expect(result).toBe(2); // "42".length === 2
+      expect(typeof result).toBe('number');
+    });
+  });
 });
 
