@@ -25,15 +25,34 @@ export type Result<T, E = Error> = Success<T> | Failure<E>;
 export type AsyncResult<T, E = Error> = Promise<Result<T, E>>;
 
 /**
+ * Creates a successful result without a value
+ * @returns A Success result with undefined value
+ */
+export function ok(): Success<undefined>;
+
+/**
  * Creates a successful result
  * @param value - The success value
  * @returns A Success result
  */
-export function ok<T>(value: T): Success<T> {
+export function ok<T>(value: T): Success<T>;
+
+/**
+ * Creates a successful result
+ * @param value - The success value (optional)
+ * @returns A Success result
+ */
+export function ok<T>(value?: T): Success<T> | Success<undefined> {
+  if (value === undefined && arguments.length === 0) {
+    return {
+      res: undefined,
+      err: undefined,
+    } as Success<undefined>;
+  }
   return {
-    res: value,
+    res: value as T,
     err: undefined,
-  };
+  } as Success<T>;
 }
 
 /**
