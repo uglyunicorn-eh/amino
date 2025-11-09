@@ -52,9 +52,9 @@ type StepIteration<V, C, NV, NC, E extends Error = Error> = (
 type ErrorTransformer<E> = (originalError: Error) => E;
 
 /**
- * Computes the updated result type when value type changes from V to NV
- * If R is the default Result<V>, it becomes Result<NV>
- * If R is a custom type (from useResult), it is preserved
+ * Computes the updated result type when the value type changes from V to NV.
+ * If R is Result<V>, it becomes Result<NV>.
+ * The R type parameter is not customizable by users; it always follows the Result<V> pattern.
  */
 type UpdatedResultType<R, V, NV> = R extends Result<V> ? Result<NV> : R;
 
