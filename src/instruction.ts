@@ -151,14 +151,13 @@ export interface Instruction<
 
   /**
    * Run the instruction and transform the result
-   * @param args - If IV is undefined: [fn]. Otherwise: [value, fn]
    * @param fn - Function that receives the result of .run() and returns a new value
+   * @param value - Optional initial value (required if IV is not undefined)
    * @returns Promise of the callback's return value
    */
   useResult<RR>(
-    ...args: IV extends undefined
-      ? [fn: (result: R) => RR | Promise<RR>]
-      : [value: IV, fn: (result: R) => RR | Promise<RR>]
+    fn: (result: R) => RR | Promise<RR>,
+    ...args: IV extends undefined ? [] : [value: IV]
   ): Promise<RR>;
 }
 
@@ -319,23 +318,12 @@ class InstructionImpl<
   }
 
   async useResult<RR>(
-    ...args: IV extends undefined
-      ? [fn: (result: R) => RR | Promise<RR>]
-      : [value: IV, fn: (result: R) => RR | Promise<RR>]
+    fn: (result: R) => RR | Promise<RR>,
+    ...args: IV extends undefined ? [] : [value: IV]
   ): Promise<RR> {
-    if (args.length === 1) {
-      // IV is undefined, args is [fn]
-      const fn = args[0] as (result: R) => RR | Promise<RR>;
-      const result = await (this.run as () => Promise<R>)();
-      const fnResult = fn(result);
-      return isPromiseLike(fnResult) ? await fnResult : fnResult;
-    } else {
-      // IV is defined, args is [value, fn]
-      const [value, fn] = args as [IV, (result: R) => RR | Promise<RR>];
-      const result = await (this.run as (value: IV) => Promise<R>)(value);
-      const fnResult = fn(result);
-      return isPromiseLike(fnResult) ? await fnResult : fnResult;
-    }
+    const result = await this.run(...(args as IV extends undefined ? [] : [IV]));
+    const fnResult = fn(result);
+    return isPromiseLike(fnResult) ? await fnResult : fnResult;
   }
 
   /**

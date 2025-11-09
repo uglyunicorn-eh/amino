@@ -91,24 +91,28 @@ instruction<number>()
   .step(async (v: number) => err('Step failed'));
 ```
 
-**Unwrap Result** - Transform result to any type:
+**Transform Result** - Run instruction and transform the result:
 ```typescript
-// Unwrap Result to get the value directly
+// useResult is async and immediately executes the instruction
+// fn is always first, then optional initial value
 const instr = instruction<number>()
-  .step(async (v: number) => ok(v * 2))
-  .useResult((v: number) => v.toString());
+  .step(async (v: number) => ok(v * 2));
 
-const result = await instr.run(5);
-// result === "10" (string, not Result<string>)
+const result = await instr.useResult((res) => {
+  if (res.err) throw res.err;
+  return res.res!.toString();
+}, 5);
+// result === "10" (string, transformed from Result<number>)
 
-// Can be used in the middle of a chain
-const instr2 = instruction<number, { base: number }>({ base: 0 })
-  .step(async (v: number) => ok(v * 2))
-  .useResult((v: number, ctx) => v) // Unwrap to number
-  .step(async (v: number, ctx) => ok(ctx.base + v)); // Still works!
+// With undefined initial value (no value parameter needed)
+const instr2 = instruction<undefined, { base: number }>({ base: 0 })
+  .step(async () => ok(42));
 
-const result2 = await instr2.run(5);
-// result2 === 10 (number, unwrapped type preserved)
+const result2 = await instr2.useResult((res) => {
+  if (res.err) throw res.err;
+  return res.res!;
+});
+// result2 === 42 (number, transformed from Result<number>)
 ```
 
 **Compile** - For better performance:
@@ -129,7 +133,7 @@ const result = await compiled(5);
 - `.context(fn)` - Transform context
 - `.assert(predicate, message?)` - Validate
 - `.failsWith(ErrorClass, message)` - Custom error
-- `.useResult(fn)` - Unwrap result and transform to any type
+- `.useResult(fn, value?)` - Run instruction and transform result (async, returns `Promise<RR>`)
 - `.compile(context?)` - Compile pipeline (returns `AsyncResult<V, E>`)
 - `.run(value?)` - Execute pipeline (returns `Promise<R>` where `R` defaults to `Result<V>`)
 

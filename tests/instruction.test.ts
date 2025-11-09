@@ -460,10 +460,10 @@ describe('Instruction Pipeline', () => {
       const instr = instruction<number, { base: number }>(initialContext)
         .step(async (v: number) => ok(v * 2));
 
-      const result = await instr.useResult(5, async (res) => {
+      const result = await instr.useResult(async (res) => {
         if (res.err) throw res.err;
         return res.res!.toString();
-      });
+      }, 5);
 
       expect(result).toBe('10'); // Unwrapped string, not Result
       expect(typeof result).toBe('string');
@@ -474,10 +474,10 @@ describe('Instruction Pipeline', () => {
       const instr = instruction<number, { base: number }>(initialContext)
         .step(async (v: number) => ok(v * 2));
 
-      const result = await instr.useResult(5, (res) => {
+      const result = await instr.useResult((res) => {
         if (res.err) throw res.err;
         return res.res! + 1;
-      });
+      }, 5);
 
       expect(result).toBe(11); // Unwrapped number
       expect(typeof result).toBe('number');
@@ -489,11 +489,11 @@ describe('Instruction Pipeline', () => {
         .step(async (v: number) => ok(v * 2))
         .context((ctx: { base: number }, v: number) => ({ ...ctx, base: ctx.base + v }));
 
-      const result = await instr.useResult(5, (res) => {
+      const result = await instr.useResult((res) => {
         if (res.err) throw res.err;
         // res is Result<number>, res.res is the value
         return res.res!;
-      });
+      }, 5);
 
       // v = 10 (5 * 2), result = 10
       expect(result).toBe(10);
@@ -504,12 +504,12 @@ describe('Instruction Pipeline', () => {
       const instr = instruction<number, { base: number }>(initialContext)
         .step<number, Error>(async (v: number) => err(new Error('Step failed')));
 
-      await expect(instr.useResult(5, (res) => {
+      await expect(instr.useResult((res) => {
         if (res.err) {
           throw res.err;
         }
         return res.res!.toString();
-      })).rejects.toThrow('Step failed');
+      }, 5)).rejects.toThrow('Step failed');
     });
 
     test('useResult receives error result when assertion fails', async () => {
@@ -518,12 +518,12 @@ describe('Instruction Pipeline', () => {
         .step(async (v: number) => ok(v * 2))
         .assert((v: number) => v === 0, 'Value must be zero');
 
-      await expect(instr.useResult(5, (res) => {
+      await expect(instr.useResult((res) => {
         if (res.err) {
           throw res.err;
         }
         return res.res!.toString();
-      })).rejects.toThrow('Value must be zero');
+      }, 5)).rejects.toThrow('Value must be zero');
     });
 
     test('useResult with different return types', async () => {
@@ -532,19 +532,19 @@ describe('Instruction Pipeline', () => {
       const instr1 = instruction<number, { base: number }>(initialContext)
         .step(async (v: number) => ok(v * 2));
 
-      const result1 = await instr1.useResult(5, (res) => {
+      const result1 = await instr1.useResult((res) => {
         if (res.err) throw res.err;
         return { value: res.res!, doubled: true };
-      });
+      }, 5);
       expect(result1).toEqual({ value: 10, doubled: true });
 
       const instr2 = instruction<number, { base: number }>(initialContext)
         .step(async (v: number) => ok(v * 2));
 
-      const result2 = await instr2.useResult(5, (res) => {
+      const result2 = await instr2.useResult((res) => {
         if (res.err) throw res.err;
         return [res.res!, res.res! * 2];
-      });
+      }, 5);
       expect(result2).toEqual([10, 20]);
     });
 
@@ -567,11 +567,11 @@ describe('Instruction Pipeline', () => {
       const instr = instruction<number, { base: number }>(initialContext)
         .step(async (v: number) => ok(v * 2));
 
-      const result = await instr.useResult(5, async (res) => {
+      const result = await instr.useResult(async (res) => {
         if (res.err) throw res.err;
         await new Promise(resolve => setTimeout(resolve, 10));
         return res.res!.toString();
-      });
+      }, 5);
 
       expect(result).toBe('10');
       expect(typeof result).toBe('string');
@@ -589,20 +589,20 @@ describe('Instruction Pipeline', () => {
         .failsWith(CustomError, 'Custom error')
         .step<number, Error>(async (v: number) => err(new Error('Step failed')));
 
-      await expect(instr.useResult(5, (res) => {
+      await expect(instr.useResult((res) => {
         if (res.err) {
           throw res.err;
         }
         return res.res!.toString();
-      })).rejects.toThrow(CustomError);
+      }, 5)).rejects.toThrow(CustomError);
       
       try {
-        await instr.useResult(5, (res) => {
+        await instr.useResult((res) => {
           if (res.err) {
             throw res.err;
           }
           return res.res!.toString();
-        });
+        }, 5);
       } catch (error) {
         expect(error).toBeInstanceOf(CustomError);
         expect((error as CustomError).message).toBe('Custom error');
@@ -616,10 +616,10 @@ describe('Instruction Pipeline', () => {
         .assert((v: number) => v > 0, 'Value must be positive')
         .context((ctx: { base: number }, v: number) => ({ ...ctx, base: ctx.base + v }));
 
-      const result = await instr.useResult(5, (res) => {
+      const result = await instr.useResult((res) => {
         if (res.err) throw res.err;
         return res.res!;
-      });
+      }, 5);
 
       // v = 10 (5 * 2), result = 10
       expect(result).toBe(10);
@@ -630,10 +630,10 @@ describe('Instruction Pipeline', () => {
       const instr = instruction<number, { base: number }>(initialContext)
         .step(async (v: number) => ok(v.toString())); // number -> string
 
-      const result = await instr.useResult(42, (res) => {
+      const result = await instr.useResult((res) => {
         if (res.err) throw res.err;
         return res.res!.length; // string -> number
-      });
+      }, 42);
 
       expect(result).toBe(2); // "42".length === 2
       expect(typeof result).toBe('number');
@@ -658,10 +658,10 @@ describe('Instruction Pipeline', () => {
       const instr = instruction<number, { base: number }>(initialContext)
         .step(async (v: number) => ok(v * 2)); // number -> number
 
-      const result = await instr.useResult(5, (res) => {
+      const result = await instr.useResult((res) => {
         if (res.err) throw res.err;
         return res.res!.toString(); // Transform to string
-      });
+      }, 5);
 
       expect(result).toBe('10'); // Transformed string
       expect(typeof result).toBe('string');
