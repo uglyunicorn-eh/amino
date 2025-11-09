@@ -150,13 +150,16 @@ export interface Instruction<
   context<NC>(fn: ContextFunction<C, V, NC>): Instruction<IV, IC, V, NC, E, R>;
 
   /**
-   * Unwrap the result and transform it to any type
-   * @param fn - Function that receives unwrapped value and context, returns any type
-   * @returns New instruction with updated result type R = RR
+   * Run the instruction and transform the result
+   * @param args - If IV is undefined: [fn]. Otherwise: [value, fn]
+   * @param fn - Function that receives the result of .run() and returns a new value
+   * @returns Promise of the callback's return value
    */
   useResult<RR>(
-    fn: (v: V, ci: C) => RR | Promise<RR>
-  ): Instruction<IV, IC, V, C, E, RR>;
+    ...args: IV extends undefined
+      ? [fn: (result: R) => RR | Promise<RR>]
+      : [value: IV, fn: (result: R) => RR | Promise<RR>]
+  ): Promise<RR>;
 }
 
 /**
@@ -176,20 +179,17 @@ class InstructionImpl<
   private readonly errorTransformer?: ErrorTransformer<E>;
   private readonly _parent?: InstructionImpl<any, any, any, any, any, any>;
   private _cachedSteps: StepIteration<any, any, any, any, any>[] | null = null;
-  private readonly _useResultFn?: (v: V, c: C) => R | Promise<R>;
 
   constructor(
     initialContext: IC,
     steps: StepIteration<any, any, any, any, any>[] = [],
     errorTransformer?: ErrorTransformer<E>,
-    parent?: InstructionImpl<any, any, any, any, any, any>,
-    useResultFn?: (v: V, c: C) => R | Promise<R>
+    parent?: InstructionImpl<any, any, any, any, any, any>
   ) {
     this.initialContext = initialContext;
     this.steps = steps;
     this.errorTransformer = errorTransformer;
     this._parent = parent;
-    this._useResultFn = useResultFn;
   }
 
   /**
@@ -226,19 +226,6 @@ class InstructionImpl<
 
   run(...args: IV extends undefined ? [] : [IV]): Promise<R> {
     const value = args[0] as IV;
-    
-    if (this._useResultFn) {
-      // If useResult was called, execute pipeline, unwrap, and call the function
-      return (async () => {
-        const [result, finalContext] = await this.executeStepsWithContext(value, this.initialContext);
-        if (result.err !== undefined) {
-          throw result.err;
-        }
-        // _useResultFn is guaranteed to be defined here due to the if check above
-        const fnResult = this._useResultFn!(result.res as V, finalContext as C);
-        return isPromiseLike(fnResult) ? await fnResult : fnResult;
-      })() as Promise<R>;
-    }
     
     // Default behavior: return Result<V, E>
     // Since R defaults to Result<V>, this should match Promise<R>
@@ -331,16 +318,24 @@ class InstructionImpl<
     return this.createInstructionWithPreservedR<V, NC>(newStep);
   }
 
-  useResult<RR>(
-    fn: (v: V, ci: C) => RR | Promise<RR>
-  ): Instruction<IV, IC, V, C, E, RR> {
-    return new InstructionImpl<IV, IC, V, C, E, RR>(
-      this.initialContext,
-      this.steps,
-      this.errorTransformer,
-      this._parent,
-      fn as any
-    ) as Instruction<IV, IC, V, C, E, RR>;
+  async useResult<RR>(
+    ...args: IV extends undefined
+      ? [fn: (result: R) => RR | Promise<RR>]
+      : [value: IV, fn: (result: R) => RR | Promise<RR>]
+  ): Promise<RR> {
+    if (args.length === 1) {
+      // IV is undefined, args is [fn]
+      const fn = args[0] as (result: R) => RR | Promise<RR>;
+      const result = await (this.run as () => Promise<R>)();
+      const fnResult = fn(result);
+      return isPromiseLike(fnResult) ? await fnResult : fnResult;
+    } else {
+      // IV is defined, args is [value, fn]
+      const [value, fn] = args as [IV, (result: R) => RR | Promise<RR>];
+      const result = await (this.run as (value: IV) => Promise<R>)(value);
+      const fnResult = fn(result);
+      return isPromiseLike(fnResult) ? await fnResult : fnResult;
+    }
   }
 
   /**
@@ -360,8 +355,7 @@ class InstructionImpl<
       this.initialContext,
       steps,
       this.errorTransformer,
-      parent,
-      this._useResultFn as any // Preserve useResultFn if R is custom type
+      parent
     ) as InstructionImpl<IV, IC, NV, NC, E, UpdatedResultType<R, V, NV>>;
   }
 
@@ -380,8 +374,7 @@ class InstructionImpl<
       this.initialContext,
       steps,
       this.errorTransformer,
-      parent,
-      this._useResultFn as any // Preserve useResultFn
+      parent
     ) as InstructionImpl<IV, IC, NV, NC, E, R>;
   }
 
@@ -397,8 +390,7 @@ class InstructionImpl<
       this.initialContext,
       this.steps,
       errorTransformer,
-      this._parent,
-      this._useResultFn as any // Preserve useResultFn
+      this._parent
     ) as InstructionImpl<IV, IC, V, C, NE, R>;
   }
 

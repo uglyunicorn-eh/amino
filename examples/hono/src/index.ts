@@ -1,17 +1,21 @@
-import { Hono } from 'hono';
-import { func } from '@uglyunicorn/amino/acids/hono';
-import { ok } from '@uglyunicorn/amino';
+import { Context, Hono } from 'hono';
+import { ok, instruction, type Result } from '@uglyunicorn/amino';
+
+const apiResponse = <V, E>(c: Context) => 
+  (res: Result<V, E>) => {
+    return res.err 
+      ? c.json({ status: 'error' as const, error: res.err }, 400) 
+      : c.json({ status: 'ok' as const, data: res.res }, 200);
+  }
 
 // Create Hono app
-const app = new Hono();
+const app = new Hono()
+  .get(
+    '/', 
+    async (c) => 
+      await instruction({ input: null })
+        .step((_, ctx) => ok({ hello: 'world' }))
+        .useResult(apiResponse(c))
+  )
 
-// Simple example endpoint
-app.get('/', async (c) => 
-  await func(c)
-    .step(() => ok({ hello: 'world' }))
-    .response()
-);
-
-// Export app for Bun - Bun will automatically serve on port 3000
-// You can also specify a custom port: export default { port: 3000, fetch: app.fetch }
-export default { port: 3002, fetch: app.fetch };
+export default app;

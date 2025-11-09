@@ -458,10 +458,12 @@ describe('Instruction Pipeline', () => {
     test('useResult unwraps result and transforms return type', async () => {
       const initialContext = { base: 0 };
       const instr = instruction<number, { base: number }>(initialContext)
-        .step(async (v: number) => ok(v * 2))
-        .useResult(async (v: number) => v.toString());
+        .step(async (v: number) => ok(v * 2));
 
-      const result = await instr.run(5);
+      const result = await instr.useResult(5, async (res) => {
+        if (res.err) throw res.err;
+        return res.res!.toString();
+      });
 
       expect(result).toBe('10'); // Unwrapped string, not Result
       expect(typeof result).toBe('string');
@@ -470,90 +472,106 @@ describe('Instruction Pipeline', () => {
     test('useResult with sync function', async () => {
       const initialContext = { base: 0 };
       const instr = instruction<number, { base: number }>(initialContext)
-        .step(async (v: number) => ok(v * 2))
-        .useResult((v: number) => v + 1);
+        .step(async (v: number) => ok(v * 2));
 
-      const result = await instr.run(5);
+      const result = await instr.useResult(5, (res) => {
+        if (res.err) throw res.err;
+        return res.res! + 1;
+      });
 
       expect(result).toBe(11); // Unwrapped number
       expect(typeof result).toBe('number');
     });
 
-    test('useResult receives context', async () => {
+    test('useResult receives run result', async () => {
       const initialContext = { base: 10 };
       const instr = instruction<number, { base: number }>(initialContext)
         .step(async (v: number) => ok(v * 2))
-        .context((ctx: { base: number }, v: number) => ({ ...ctx, base: ctx.base + v }))
-        .useResult((v: number, ctx: { base: number }) => v + ctx.base);
+        .context((ctx: { base: number }, v: number) => ({ ...ctx, base: ctx.base + v }));
 
-      const result = await instr.run(5);
+      const result = await instr.useResult(5, (res) => {
+        if (res.err) throw res.err;
+        // res is Result<number>, res.res is the value
+        return res.res!;
+      });
 
-      // v = 10 (5 * 2), ctx.base = 10 + 10 = 20, result = 10 + 20 = 30
-      expect(result).toBe(30);
+      // v = 10 (5 * 2), result = 10
+      expect(result).toBe(10);
     });
 
-    test('useResult throws error when pipeline fails', async () => {
+    test('useResult receives error result when pipeline fails', async () => {
       const initialContext = { base: 0 };
       const instr = instruction<number, { base: number }>(initialContext)
-        .step<number, Error>(async (v: number) => err(new Error('Step failed')))
-        .useResult((v: number) => v.toString());
+        .step<number, Error>(async (v: number) => err(new Error('Step failed')));
 
-      await expect(instr.run(5)).rejects.toThrow('Step failed');
+      await expect(instr.useResult(5, (res) => {
+        if (res.err) {
+          throw res.err;
+        }
+        return res.res!.toString();
+      })).rejects.toThrow('Step failed');
     });
 
-    test('useResult throws error when assertion fails', async () => {
+    test('useResult receives error result when assertion fails', async () => {
       const initialContext = { base: 0 };
       const instr = instruction<number, { base: number }>(initialContext)
         .step(async (v: number) => ok(v * 2))
-        .assert((v: number) => v === 0, 'Value must be zero')
-        .useResult((v: number) => v.toString());
+        .assert((v: number) => v === 0, 'Value must be zero');
 
-      await expect(instr.run(5)).rejects.toThrow('Value must be zero');
+      await expect(instr.useResult(5, (res) => {
+        if (res.err) {
+          throw res.err;
+        }
+        return res.res!.toString();
+      })).rejects.toThrow('Value must be zero');
     });
 
     test('useResult with different return types', async () => {
       const initialContext = { base: 0 };
       
       const instr1 = instruction<number, { base: number }>(initialContext)
-        .step(async (v: number) => ok(v * 2))
-        .useResult((v: number) => ({ value: v, doubled: true }));
+        .step(async (v: number) => ok(v * 2));
 
-      const result1 = await instr1.run(5);
+      const result1 = await instr1.useResult(5, (res) => {
+        if (res.err) throw res.err;
+        return { value: res.res!, doubled: true };
+      });
       expect(result1).toEqual({ value: 10, doubled: true });
 
       const instr2 = instruction<number, { base: number }>(initialContext)
-        .step(async (v: number) => ok(v * 2))
-        .useResult((v: number) => [v, v * 2]);
+        .step(async (v: number) => ok(v * 2));
 
-      const result2 = await instr2.run(5);
+      const result2 = await instr2.useResult(5, (res) => {
+        if (res.err) throw res.err;
+        return [res.res!, res.res! * 2];
+      });
       expect(result2).toEqual([10, 20]);
     });
 
-    test('compile still returns AsyncResult after useResult', async () => {
+    test('compile still returns AsyncResult (useResult is separate)', async () => {
       const initialContext = { base: 0 };
       const instr = instruction<number, { base: number }>(initialContext)
-        .step(async (v: number) => ok(v * 2))
-        .useResult((v: number) => v.toString());
+        .step(async (v: number) => ok(v * 2));
 
       const compiled = instr.compile();
       const result = await compiled(5);
 
       // compile() should still return Result, not unwrapped
       expect(result.err).toBeUndefined();
-      expect(result.res).toBe(10); // Number, not string
+      expect(result.res).toBe(10); // Number
       expect(typeof result.res).toBe('number');
     });
 
     test('useResult with async function', async () => {
       const initialContext = { base: 0 };
       const instr = instruction<number, { base: number }>(initialContext)
-        .step(async (v: number) => ok(v * 2))
-        .useResult(async (v: number) => {
-          await new Promise(resolve => setTimeout(resolve, 10));
-          return v.toString();
-        });
+        .step(async (v: number) => ok(v * 2));
 
-      const result = await instr.run(5);
+      const result = await instr.useResult(5, async (res) => {
+        if (res.err) throw res.err;
+        await new Promise(resolve => setTimeout(resolve, 10));
+        return res.res!.toString();
+      });
 
       expect(result).toBe('10');
       expect(typeof result).toBe('string');
@@ -569,72 +587,83 @@ describe('Instruction Pipeline', () => {
       const initialContext = { base: 0 };
       const instr = instruction<number, { base: number }>(initialContext)
         .failsWith(CustomError, 'Custom error')
-        .step<number, Error>(async (v: number) => err(new Error('Step failed')))
-        .useResult((v: number) => v.toString());
+        .step<number, Error>(async (v: number) => err(new Error('Step failed')));
 
-      await expect(instr.run(5)).rejects.toThrow(CustomError);
+      await expect(instr.useResult(5, (res) => {
+        if (res.err) {
+          throw res.err;
+        }
+        return res.res!.toString();
+      })).rejects.toThrow(CustomError);
+      
       try {
-        await instr.run(5);
+        await instr.useResult(5, (res) => {
+          if (res.err) {
+            throw res.err;
+          }
+          return res.res!.toString();
+        });
       } catch (error) {
         expect(error).toBeInstanceOf(CustomError);
         expect((error as CustomError).message).toBe('Custom error');
       }
     });
 
-    test('useResult can be chained with other methods before it', async () => {
+    test('useResult can be called after chaining other methods', async () => {
       const initialContext = { base: 0 };
       const instr = instruction<number, { base: number }>(initialContext)
         .step(async (v: number) => ok(v * 2))
         .assert((v: number) => v > 0, 'Value must be positive')
-        .context((ctx: { base: number }, v: number) => ({ ...ctx, base: ctx.base + v }))
-        .useResult((v: number, ctx: { base: number }) => v + ctx.base);
+        .context((ctx: { base: number }, v: number) => ({ ...ctx, base: ctx.base + v }));
 
-      const result = await instr.run(5);
+      const result = await instr.useResult(5, (res) => {
+        if (res.err) throw res.err;
+        return res.res!;
+      });
 
-      // v = 10 (5 * 2), ctx.base = 0 + 10 = 10, result = 10 + 10 = 20
-      expect(result).toBe(20);
+      // v = 10 (5 * 2), result = 10
+      expect(result).toBe(10);
     });
 
     test('type inference through useResult', async () => {
       const initialContext = { base: 0 };
       const instr = instruction<number, { base: number }>(initialContext)
-        .step(async (v: number) => ok(v.toString())) // number -> string
-        .useResult((v: string) => v.length); // string -> number
+        .step(async (v: number) => ok(v.toString())); // number -> string
 
-      const result = await instr.run(42);
+      const result = await instr.useResult(42, (res) => {
+        if (res.err) throw res.err;
+        return res.res!.length; // string -> number
+      });
 
       expect(result).toBe(2); // "42".length === 2
       expect(typeof result).toBe('number');
     });
 
-    test('useResult followed by step preserves unwrapped type', async () => {
+    test('useResult with undefined initial value', async () => {
       const initialContext = { base: 0 };
-      const instr = instruction<number, { base: number }>(initialContext)
-        .useResult(async (v: number, ctx: { base: number }) => v) // Unwrap to number
-        .step(async (v: number, ctx: { base: number }) => ok(ctx.base + v)); // Transform number -> number
+      const instr = instruction<undefined, { base: number }>(initialContext)
+        .step(async () => ok(42));
 
-      const result = await instr.run(1);
+      const result = await instr.useResult((res) => {
+        if (res.err) throw res.err;
+        return res.res!;
+      });
 
-      // Result should still be unwrapped number, not Result<number>
-      expect(result).toBe(1); // Unwrapped value, not Result
+      expect(result).toBe(42);
       expect(typeof result).toBe('number');
-      // Verify it's not a Result object
-      expect(result).not.toHaveProperty('res');
-      expect(result).not.toHaveProperty('err');
     });
 
-    test('useResult with assert and context preserves unwrapped type', async () => {
+    test('useResult returns transformed value', async () => {
       const initialContext = { base: 0 };
       const instr = instruction<number, { base: number }>(initialContext)
-        .step(async (v: number) => ok(v * 2)) // number -> number
-        .useResult((v: number) => v.toString()) // Unwrap to string
-        .assert((v: number) => v > 0, 'Value must be positive') // Assert preserves R
-        .context((ctx: { base: number }, v: number) => ({ ...ctx, base: ctx.base + v })); // Context preserves R
+        .step(async (v: number) => ok(v * 2)); // number -> number
 
-      const result = await instr.run(5);
+      const result = await instr.useResult(5, (res) => {
+        if (res.err) throw res.err;
+        return res.res!.toString(); // Transform to string
+      });
 
-      // Result should still be unwrapped string (from useResult), not Result<string>
-      expect(result).toBe('10'); // Unwrapped string
+      expect(result).toBe('10'); // Transformed string
       expect(typeof result).toBe('string');
       expect(result).not.toHaveProperty('res');
       expect(result).not.toHaveProperty('err');
