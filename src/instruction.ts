@@ -321,7 +321,7 @@ class InstructionImpl<
     fn: (result: R) => RR | Promise<RR>,
     ...args: IV extends undefined ? [] : [value: IV]
   ): Promise<RR> {
-    const result = await this.run(...(args as IV extends undefined ? [] : [IV]));
+    const result = await this.run(...args);
     const fnResult = fn(result);
     return isPromiseLike(fnResult) ? await fnResult : fnResult;
   }
