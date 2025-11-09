@@ -3,6 +3,13 @@ import { ok, err, type Result } from '../src/index.ts';
 
 describe('Result Pattern', () => {
   describe('ok() - Success results', () => {
+    test('creates success result without arguments', () => {
+      const result = ok();
+      
+      expect(result.res).toBeUndefined();
+      expect(result.err).toBeUndefined();
+    });
+
     test('creates success result', () => {
       const result = ok('hello');
       
