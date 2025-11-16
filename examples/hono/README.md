@@ -1,10 +1,10 @@
-# Hono Extension Example
+# Hono Integration Example
 
-This example demonstrates using Amino's Hono extension to build a simple REST API with Hono on Bun.
+This example demonstrates using Amino with Hono to build a simple REST API with Hono on Bun.
 
 ## Features
 
-- Hono integration with Amino extensions
+- Hono integration with Amino's instruction pipeline
 - Type-safe error handling with Result pattern
 - Clean API responses (200 for success, 400 for errors)
 - JSON response formatting
@@ -42,41 +42,83 @@ curl http://localhost:3000/
 **Response (200):**
 ```json
 {
-  "hello": "world"
+  "status": "ok",
+  "data": {
+    "hello": "world"
+  }
 }
 ```
 
 ## How It Works
 
-The Hono extension provides a `.response()` action that:
-- Executes the operation pipeline
-- Sends JSON response with proper status codes (200 for success, 400 for errors)
-- Handles both success and error cases
-- Maintains type safety throughout
+This example shows how to integrate Amino's instruction pipeline with Hono:
+
+1. Use `instruction()` to create a pipeline
+2. Chain `.step()` calls to define your business logic
+3. Use `.useResult()` to transform the Result into a Hono response
+4. Handle both success and error cases with proper HTTP status codes
 
 ## Code Example
 
+Here's the complete implementation:
+
 ```typescript
-import { Hono } from 'hono';
-import { func } from '@uglyunicorn/amino/acids/hono';
-import { ok } from '@uglyunicorn/amino';
+import { Context, Hono } from 'hono';
+import { ok, instruction, type Result } from '@uglyunicorn/amino';
 
-const app = new Hono();
+// Helper function to convert Amino Result to Hono JSON response
+const apiResponse = <V, E>(c: Context) => 
+  (res: Result<V, E>) => {
+    return res.err 
+      ? c.json({ status: 'error' as const, error: res.err }, 400) 
+      : c.json({ status: 'ok' as const, data: res.res }, 200);
+  }
 
-app.get('/', async (c) => 
-  await func(c)
-    .step(() => ok({ hello: 'world' }))
-    .response()
-);
+// Create Hono app
+const app = new Hono()
+  .get('/', (c) => 
+      instruction()
+        .step(() => ok({ hello: 'world' }))
+        .useResult(apiResponse(c))
+  )
 
-// Export for Bun - Bun will automatically serve on port 3000
 export default app;
+```
+
+### More Complex Example
+
+You can chain multiple steps and handle errors. Here's an example that validates input and performs a lookup:
+
+```typescript
+import { ok, err, instruction, type Result } from '@uglyunicorn/amino';
+
+app.get(
+  '/users/:id', (c) => 
+    instruction({ userId: c.req.param('id') })
+      .step((_, ctx) => {
+        // Validate input from context
+        const id = ctx.userId;
+        if (!id || isNaN(Number(id))) {
+          return err(new Error('Invalid user ID'));
+        }
+        return ok(Number(id));
+      })
+      .step((id) => {
+        // Simulate database lookup
+        if (id === 1) {
+          return ok({ id: 1, name: 'Alice' });
+        }
+        return err(new Error('User not found'));
+      })
+      .useResult(apiResponse(c))
+);
 ```
 
 This pattern allows you to:
 1. Define your business logic in steps
-2. Let the extension handle response formatting
-3. Maintain type safety and error handling throughout
+2. Handle errors at each step
+3. Transform the final result into a proper HTTP response
+4. Maintain type safety throughout
 
 ## Bun Integration
 
