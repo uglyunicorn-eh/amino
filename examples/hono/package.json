@@ -9,11 +9,11 @@
   },
   "dependencies": {
     "hono": "latest",
-    "@uglyunicorn/amino": "file:../../"
+    "@uglyunicorn/amino": "latest"
   },
   "devDependencies": {
     "@types/bun": "latest",
-    "typescript": "^5.9.3"
+    "typescript": "latest"
   }
 }
 
