@@ -1,6 +1,6 @@
 # Hono Integration Example
 
-This example demonstrates using Amino with Hono to build a simple REST API with Hono on Bun.
+This example demonstrates using Amino with Hono to build a simple REST API on Bun.
 
 ## Features
 
