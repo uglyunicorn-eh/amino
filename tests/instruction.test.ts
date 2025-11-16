@@ -159,6 +159,36 @@ describe('Instruction Pipeline', () => {
     expect(result.err?.cause instanceof Error ? result.err.cause.message : undefined).toBe('Step failed');
   });
 
+  test('failsWith preserves error type in run() return type', async () => {
+    class CustomError extends Error {
+      constructor(message: string, options?: { cause?: Error }) {
+        super(message, options);
+      }
+    }
+
+    const initialContext = { base: 0 };
+    const instr = instruction<number, { base: number }>(initialContext)
+      .failsWith(CustomError, 'Custom error')
+      .step(async (v: number) => ok(v * 2));
+
+    // TypeScript should infer result as AsyncResult<number, CustomError>
+    // This test verifies the error type is preserved in the return type
+    const result = await instr.run(5);
+
+    expect(result.err).toBeUndefined();
+    expect(result.res).toBe(10);
+
+    // Verify that if an error occurs, it's a CustomError
+    const errorInstr = instruction<number, { base: number }>(initialContext)
+      .failsWith(CustomError, 'Custom error')
+      .step(async (v: number) => err(new Error('Step failed')));
+
+    const errorResult = await errorInstr.run(5);
+    expect(errorResult.err).toBeDefined();
+    expect(errorResult.err).toBeInstanceOf(CustomError);
+    expect(errorResult.err?.message).toBe('Custom error');
+  });
+
   test('pipeline fails fast on first error', async () => {
     let step2Executed = false;
     let step3Executed = false;
