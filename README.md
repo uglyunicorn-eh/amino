@@ -41,7 +41,7 @@ Use `ensure` to unwrap a Result, throwing an error if the result is a failure:
 import { ok, err, ensure } from '@uglyunicorn/amino';
 
 const value = ensure(ok(42)); // 42
-const asyncValue = await ensure(Promise.resolve(ok('hello'))); // 'hello'
+const asyncValue = await ensure(async () => ok('hello')); // 'hello'
 
 ensure(err('error')); // throws Error('Ensure violation error')
 ```
