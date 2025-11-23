@@ -65,6 +65,13 @@ type UpdatedResultType<R, V, NV, E extends Error = Error> = R extends Result<V, 
  */
 type UpdatedErrorType<R, V, E extends Error, NE extends Error> = R extends Result<V, E> ? Result<V, NE> : R;
 
+/**
+ * Conditionally excludes undefined from type V if undefined is part of the union.
+ * If undefined extends V (meaning undefined is in the union), exclude it.
+ * Otherwise, return V unchanged.
+ */
+type ExcludeUndefinedIfPresent<V> = undefined extends V ? Exclude<V, undefined> : V;
+
 type CompiledPipeline<IV, V, E extends Error = Error> = IV extends undefined
   ? (v?: IV) => AsyncResult<V, E>
   : (v: IV) => AsyncResult<V, E>;
@@ -140,13 +147,13 @@ export interface Instruction<
    * Add an assertion/validation step that doesn't transform the value
    * @param predicate - Predicate function that returns true if assertion passes
    * @param message - Optional error message if assertion fails
-   * @returns New instruction with same value type (no transformation)
-   * R type is preserved (custom type from useResult or default Result<V, E>)
+   * @returns New instruction with value type narrowed to exclude undefined (if undefined was part of V)
+   * R type is updated to reflect the narrowed value type (custom type from useResult is preserved)
    */
   assert(
     predicate: AssertFunction<V, C>,
     message?: string
-  ): Instruction<IV, IC, V, C, E, R>;
+  ): Instruction<IV, IC, ExcludeUndefinedIfPresent<V>, C, E, UpdatedResultType<R, V, ExcludeUndefinedIfPresent<V>, E>>;
 
   /**
    * Add a context transformation step to the pipeline
@@ -287,24 +294,24 @@ class InstructionImpl<
   assert(
     predicate: AssertFunction<V, C>,
     message?: string
-  ): Instruction<IV, IC, V, C, E, R> {
-    const newStep: StepIteration<V, C, V, C, E> = async (
+  ): Instruction<IV, IC, ExcludeUndefinedIfPresent<V>, C, E, UpdatedResultType<R, V, ExcludeUndefinedIfPresent<V>, E>> {
+    const newStep: StepIteration<V, C, ExcludeUndefinedIfPresent<V>, C, E> = async (
       v: V,
       c: C
-    ): Promise<[Result<V, E>, C]> => {
+    ): Promise<[Result<ExcludeUndefinedIfPresent<V>, E>, C]> => {
       const result = predicate(v, c);
       const passed = isPromiseLike(result) ? await result : result;
 
       if (!passed) {
         const error = new Error(message || 'Assertion failed');
-        return [err(error) as Result<V, E>, c];
+        return [err(error) as Result<ExcludeUndefinedIfPresent<V>, E>, c];
       }
 
-      return [ok(v), c];
+      return [ok(v as ExcludeUndefinedIfPresent<V>), c];
     };
 
-    // For assert, V doesn't change, so we preserve R type
-    return this.createInstructionWithPreservedR<V, C>(newStep);
+    // For assert, V is narrowed to exclude undefined, and R type is updated accordingly
+    return this.createChildInstruction<ExcludeUndefinedIfPresent<V>, C>(newStep);
   }
 
   context<NC>(fn: ContextFunction<C, V, NC>): Instruction<IV, IC, V, NC, E, R> {
@@ -355,7 +362,7 @@ class InstructionImpl<
   }
 
   /**
-   * Create a new instruction with preserved R type (for assert and context)
+   * Create a new instruction with preserved R type (for context)
    * @param newStep - The step to add
    * @returns New instruction instance with same R type
    */
@@ -372,6 +379,7 @@ class InstructionImpl<
       parent
     ) as InstructionImpl<IV, IC, NV, NC, E, R>;
   }
+
 
   /**
    * Create a new instruction with updated error type and updated R type (for failsWith)
