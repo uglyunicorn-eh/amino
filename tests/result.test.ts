@@ -93,7 +93,7 @@ describe('Result Pattern', () => {
         expect(ensure(ok(42))).toBe(42);
         expect(ensure(ok('hello'))).toBe('hello');
         expect(ensure(ok(null))).toBeNull();
-        expect(ensure(ok())).toBeUndefined();
+        // ensure(ok()) should cause a TypeScript error - ensure cannot return undefined
       });
 
       test('unwraps successful result with object', () => {
@@ -127,6 +127,20 @@ describe('Result Pattern', () => {
         
         expect(value).toBe('success');
       });
+
+      test('return type excludes undefined', () => {
+        const numResult: Result<number> = ok(42);
+        const numValue: number = ensure(numResult);
+        expect(numValue).toBe(42);
+        
+        const nullResult: Result<null> = ok(null);
+        const nullValue: null = ensure(nullResult);
+        expect(nullValue).toBeNull();
+        
+        // Type-level test: ensure(ok()) should cause TypeScript error
+        // This is verified by the fact that the following would not compile:
+        // const undefinedValue = ensure(ok()); // TypeScript error: Argument of type 'Result<undefined>' is not assignable
+      });
     });
 
     describe('Asynchronous AsyncResult', () => {
@@ -134,7 +148,7 @@ describe('Result Pattern', () => {
         expect(await ensure(Promise.resolve(ok(42)))).toBe(42);
         expect(await ensure(Promise.resolve(ok('hello')))).toBe('hello');
         expect(await ensure(Promise.resolve(ok(null)))).toBeNull();
-        expect(await ensure(Promise.resolve(ok()))).toBeUndefined();
+        // ensure(Promise.resolve(ok())) should cause a TypeScript error - ensure cannot return undefined
       });
 
       test('throws error when async result is a failure', async () => {
@@ -172,6 +186,20 @@ describe('Result Pattern', () => {
         const value: string = await ensure(result);
         
         expect(value).toBe('success');
+      });
+
+      test('return type excludes undefined for async result', async () => {
+        const numResult: AsyncResult<number> = Promise.resolve(ok(42));
+        const numValue: number = await ensure(numResult);
+        expect(numValue).toBe(42);
+        
+        const nullResult: AsyncResult<null> = Promise.resolve(ok(null));
+        const nullValue: null = await ensure(nullResult);
+        expect(nullValue).toBeNull();
+        
+        // Type-level test: ensure(Promise.resolve(ok())) should cause TypeScript error
+        // This is verified by the fact that the following would not compile:
+        // const undefinedValue = await ensure(Promise.resolve(ok())); // TypeScript error
       });
     });
   });
