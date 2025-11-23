@@ -27,7 +27,7 @@ export type AsyncResult<T, E = Error> = Promise<Result<T, E>>;
 /**
  * Union type representing either a synchronous Result or an asynchronous AsyncResult
  */
-export type AnyResult<T, E extends Error = Error> = Result<T, E> | AsyncResult<T, E>;
+export type AnyResult<T, E = Error> = Result<T, E> | AsyncResult<T, E>;
 
 /**
  * Creates a successful result without a value
