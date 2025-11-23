@@ -35,13 +35,12 @@ const result2 = await trycatch(async () => {
 
 ### Unwrapping Results
 
-Use `ensure` to unwrap a Result, throwing an error if the result is a failure:
+Use `ensure` to unwrap a Result, throwing an error if the result is a failure. `ensure` never returns `undefined` - it cannot be used with `Result<undefined>`:
 
 ```typescript
 import { ok, err, ensure } from '@uglyunicorn/amino';
 
 const value = ensure(ok(42)); // 42
-const asyncValue = await ensure(async () => ok('hello')); // 'hello'
 
 ensure(err('error')); // throws Error('Ensure violation error')
 ```
