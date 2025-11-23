@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'bun:test';
-import { ok, err, type Result } from '../src/index.ts';
+import { ok, err, ensure, type Result, type AsyncResult } from '../src/index.ts';
 
 describe('Result Pattern', () => {
   describe('ok() - Success results', () => {
@@ -84,6 +84,95 @@ describe('Result Pattern', () => {
       if (failure.err !== undefined) {
         expect(failure.err.message).toBe('Division by zero');
       }
+    });
+  });
+
+  describe('ensure() - Unwrap Result', () => {
+    describe('Synchronous Result', () => {
+      test('unwraps successful result', () => {
+        expect(ensure(ok(42))).toBe(42);
+        expect(ensure(ok('hello'))).toBe('hello');
+        expect(ensure(ok(null))).toBeNull();
+        expect(ensure(ok())).toBeUndefined();
+      });
+
+      test('unwraps successful result with object', () => {
+        const obj = { name: 'test', value: 123 };
+        const value = ensure(ok(obj));
+        
+        expect(value).toEqual(obj);
+        expect(value.name).toBe('test');
+      });
+
+      test('throws error when result is a failure', () => {
+        expect(() => ensure(err('error'))).toThrow('Ensure violation error');
+        expect(() => ensure(err(new Error('error')))).toThrow('Ensure violation error');
+      });
+
+      test('includes original error as cause', () => {
+        const originalError = new Error('original error');
+        try {
+          ensure(err(originalError));
+          expect(true).toBe(false);
+        } catch (error) {
+          expect(error).toBeInstanceOf(Error);
+          expect((error as Error).message).toBe('Ensure violation error');
+          expect((error as Error & { cause?: Error }).cause).toBe(originalError);
+        }
+      });
+
+      test('type narrowing works correctly', () => {
+        const result: Result<string> = ok('success');
+        const value: string = ensure(result);
+        
+        expect(value).toBe('success');
+      });
+    });
+
+    describe('Asynchronous AsyncResult', () => {
+      test('unwraps successful async result', async () => {
+        expect(await ensure(Promise.resolve(ok(42)))).toBe(42);
+        expect(await ensure(Promise.resolve(ok('hello')))).toBe('hello');
+        expect(await ensure(Promise.resolve(ok(null)))).toBeNull();
+        expect(await ensure(Promise.resolve(ok()))).toBeUndefined();
+      });
+
+      test('throws error when async result is a failure', async () => {
+        await expect(ensure(Promise.resolve(err('error')))).rejects.toThrow('Ensure violation error');
+        await expect(ensure(Promise.resolve(err(new Error('error'))))).rejects.toThrow('Ensure violation error');
+      });
+
+      test('includes original error as cause in async result', async () => {
+        const originalError = new Error('original error');
+        try {
+          await ensure(Promise.resolve(err(originalError)));
+          expect(true).toBe(false);
+        } catch (error) {
+          expect(error).toBeInstanceOf(Error);
+          expect((error as Error).message).toBe('Ensure violation error');
+          expect((error as Error & { cause?: Error }).cause).toBe(originalError);
+        }
+      });
+
+      test('properly awaits promise', async () => {
+        let resolved = false;
+        const result: AsyncResult<number> = new Promise((resolve) => {
+          setTimeout(() => {
+            resolved = true;
+            resolve(ok(42));
+          }, 10);
+        });
+        
+        expect(await ensure(result)).toBe(42);
+        expect(resolved).toBe(true);
+      });
+
+      test('type narrowing works correctly for async result', async () => {
+        const result: AsyncResult<string> = Promise.resolve(ok('success'));
+        const value: string = await ensure(result);
+        
+        expect(value).toBe('success');
+      });
     });
   });
 });

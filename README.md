@@ -15,7 +15,7 @@ bun add @uglyunicorn/amino
 Handle success and errors without exceptions:
 
 ```typescript
-import { ok, err, trycatch } from '@uglyunicorn/amino';
+import { ok, err, trycatch, ensure } from '@uglyunicorn/amino';
 
 const { res, err: error } = ok(42);
 if (error === undefined) {
@@ -31,6 +31,19 @@ const result2 = await trycatch(async () => {
   return response.json();
 });
 // Async: returns AsyncResult<T>
+```
+
+### Unwrapping Results
+
+Use `ensure` to unwrap a Result, throwing an error if the result is a failure:
+
+```typescript
+import { ok, err, ensure } from '@uglyunicorn/amino';
+
+const value = ensure(ok(42)); // 42
+const asyncValue = await ensure(async () => ok('hello')); // 'hello'
+
+ensure(err('error')); // throws Error('Ensure violation error')
 ```
 
 ## Instruction Pipeline
@@ -152,7 +165,9 @@ export default app;
 
 ## API
 
-**Result**: `ok(value)`, `err(error)`, `trycatch(fn)`
+**Result**: `ok(value)`, `err(error)`, `trycatch(fn)`, `ensure(result)`
+
+**Types**: `Result<T, E>`, `AsyncResult<T, E>`, `AnyResult<T, E>`
 
 **Instruction**: `instruction<IV, IC>(context?)`
 - `.step(fn)` - Transform value

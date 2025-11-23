@@ -25,6 +25,11 @@ export type Result<T, E = Error> = Success<T> | Failure<E>;
 export type AsyncResult<T, E = Error> = Promise<Result<T, E>>;
 
 /**
+ * Union type representing either a synchronous Result or an asynchronous AsyncResult
+ */
+export type AnyResult<T, E = Error> = Result<T, E> | AsyncResult<T, E>;
+
+/**
  * Creates a successful result without a value
  * @returns A Success result with undefined value
  */
@@ -87,4 +92,35 @@ export function err<E extends Error>(error: E | string): Failure<E> | Failure<Er
     res: undefined,
     err: new Error(error),
   };
+}
+
+/**
+ * Unwraps a synchronous Result, throwing an error if the result is a failure
+ * @param result - The Result to unwrap
+ * @returns The value if successful
+ * @throws Error if the result is a failure
+ */
+export function ensure<T, E extends Error = Error>(result: Result<T, E>): T;
+
+/**
+ * Unwraps an asynchronous AsyncResult, returning a Promise that resolves to the value or rejects if the result is a failure
+ * @param result - The AsyncResult to unwrap
+ * @returns A Promise that resolves to the value if successful
+ * @throws Error if the result is a failure
+ */
+export function ensure<T, E extends Error = Error>(result: AsyncResult<T, E>): Promise<T>;
+
+/**
+ * Unwraps a Result or AsyncResult, throwing an error if the result is a failure
+ * @param result - The Result or AsyncResult to unwrap
+ * @returns The value (or Promise that resolves to the value) if successful
+ * @throws Error if the result is a failure
+ */
+export function ensure<T, E extends Error = Error>(result: Result<T, E> | AsyncResult<T, E>): T | Promise<T> {
+  const unwrap = (r: Result<T, E>): T => {
+    if (r.err !== undefined) throw new Error('Ensure violation error', { cause: r.err });
+    return r.res as T;
+  };
+
+  return result instanceof Promise ? result.then(unwrap) : unwrap(result);
 }
