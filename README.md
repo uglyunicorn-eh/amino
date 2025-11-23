@@ -40,21 +40,10 @@ Use `ensure` to unwrap a Result, throwing an error if the result is a failure:
 ```typescript
 import { ok, err, ensure } from '@uglyunicorn/amino';
 
-// Synchronous Result
-const result = ok(42);
-const value = ensure(result); // 42
+const value = ensure(ok(42)); // 42
+const asyncValue = await ensure(Promise.resolve(ok('hello'))); // 'hello'
 
-// Throws if result is a failure
-const failure = err('Something went wrong');
-ensure(failure); // throws Error('Ensure violation error') with original error as cause
-
-// Asynchronous AsyncResult
-const asyncResult = Promise.resolve(ok('hello'));
-const asyncValue = await ensure(asyncResult); // 'hello'
-
-// Works with both sync and async
-const anyResult: Result<number> | AsyncResult<number> = ok(42);
-const unwrapped = ensure(anyResult); // number or Promise<number>
+ensure(err('error')); // throws Error('Ensure violation error')
 ```
 
 ## Instruction Pipeline
