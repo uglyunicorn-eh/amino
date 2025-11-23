@@ -1,6 +1,6 @@
 // Result types and functions
-export { ok, err } from './result.ts';
-export type { Result, Success, Failure, AsyncResult } from './result.ts';
+export { ok, err, ensure } from './result.ts';
+export type { Result, Success, Failure, AsyncResult, AnyResult } from './result.ts';
 
 // Try-catch utility
 export { trycatch } from './trycatch.ts';
