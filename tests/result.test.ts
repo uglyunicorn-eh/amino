@@ -202,5 +202,155 @@ describe('Result Pattern', () => {
         // const undefinedValue = await ensure(Promise.resolve(ok())); // TypeScript error
       });
     });
+
+    describe('ensure() with custom error message (string parameter)', () => {
+      describe('Synchronous Result', () => {
+        test('throws error with custom message when result is a failure', () => {
+          expect(() => ensure(err('error'), 'Custom error message')).toThrow('Custom error message');
+          expect(() => ensure(err(new Error('error')), 'Another custom message')).toThrow('Another custom message');
+        });
+
+        test('preserves original error as cause when using custom message', () => {
+          const originalError = new Error('original error');
+          try {
+            ensure(err(originalError), 'Custom error message');
+            expect(true).toBe(false);
+          } catch (error) {
+            expect(error).toBeInstanceOf(Error);
+            expect((error as Error).message).toBe('Custom error message');
+            expect((error as Error & { cause?: Error }).cause).toBe(originalError);
+          }
+        });
+
+        test('unwraps successful result normally with custom message parameter', () => {
+          expect(ensure(ok(42), 'Custom message')).toBe(42);
+          expect(ensure(ok('hello'), 'Custom message')).toBe('hello');
+        });
+      });
+
+      describe('Asynchronous AsyncResult', () => {
+        test('throws error with custom message when async result is a failure', async () => {
+          await expect(ensure(Promise.resolve(err('error')), 'Custom error message')).rejects.toThrow('Custom error message');
+          await expect(ensure(Promise.resolve(err(new Error('error'))), 'Another custom message')).rejects.toThrow('Another custom message');
+        });
+
+        test('preserves original error as cause when using custom message in async result', async () => {
+          const originalError = new Error('original error');
+          try {
+            await ensure(Promise.resolve(err(originalError)), 'Custom error message');
+            expect(true).toBe(false);
+          } catch (error) {
+            expect(error).toBeInstanceOf(Error);
+            expect((error as Error).message).toBe('Custom error message');
+            expect((error as Error & { cause?: Error }).cause).toBe(originalError);
+          }
+        });
+
+        test('unwraps successful async result normally with custom message parameter', async () => {
+          expect(await ensure(Promise.resolve(ok(42)), 'Custom message')).toBe(42);
+          expect(await ensure(Promise.resolve(ok('hello')), 'Custom message')).toBe('hello');
+        });
+      });
+    });
+
+    describe('ensure() with error factory function', () => {
+      describe('Synchronous Result', () => {
+        test('throws error from factory function when result is a failure', () => {
+          const factory = (error: Error) => new Error(`Wrapped: ${error.message}`);
+          expect(() => ensure(err('error'), factory)).toThrow('Wrapped: error');
+        });
+
+        test('factory function receives correct error', () => {
+          const originalError = new Error('original error');
+          const factory = (error: Error) => {
+            expect(error).toBe(originalError);
+            return new Error(`Factory error: ${error.message}`);
+          };
+          
+          try {
+            ensure(err(originalError), factory);
+            expect(true).toBe(false);
+          } catch (error) {
+            expect(error).toBeInstanceOf(Error);
+            expect((error as Error).message).toBe('Factory error: original error');
+          }
+        });
+
+        test('factory function can return custom Error types', () => {
+          class CustomError extends Error {
+            constructor(message: string, public code: number) {
+              super(message);
+              this.name = 'CustomError';
+            }
+          }
+
+          const factory = (error: Error) => new CustomError(`Custom: ${error.message}`, 500);
+          
+          try {
+            ensure(err('error'), factory);
+            expect(true).toBe(false);
+          } catch (error) {
+            expect(error).toBeInstanceOf(CustomError);
+            expect((error as CustomError).message).toBe('Custom: error');
+            expect((error as CustomError).code).toBe(500);
+          }
+        });
+
+        test('unwraps successful result normally with factory parameter', () => {
+          const factory = (error: Error) => new Error('Should not be called');
+          expect(ensure(ok(42), factory)).toBe(42);
+          expect(ensure(ok('hello'), factory)).toBe('hello');
+        });
+      });
+
+      describe('Asynchronous AsyncResult', () => {
+        test('throws error from factory function when async result is a failure', async () => {
+          const factory = (error: Error) => new Error(`Wrapped: ${error.message}`);
+          await expect(ensure(Promise.resolve(err('error')), factory)).rejects.toThrow('Wrapped: error');
+        });
+
+        test('factory function receives correct error in async result', async () => {
+          const originalError = new Error('original error');
+          const factory = (error: Error) => {
+            expect(error).toBe(originalError);
+            return new Error(`Factory error: ${error.message}`);
+          };
+          
+          try {
+            await ensure(Promise.resolve(err(originalError)), factory);
+            expect(true).toBe(false);
+          } catch (error) {
+            expect(error).toBeInstanceOf(Error);
+            expect((error as Error).message).toBe('Factory error: original error');
+          }
+        });
+
+        test('factory function can return custom Error types in async result', async () => {
+          class CustomError extends Error {
+            constructor(message: string, public code: number) {
+              super(message);
+              this.name = 'CustomError';
+            }
+          }
+
+          const factory = (error: Error) => new CustomError(`Custom: ${error.message}`, 500);
+          
+          try {
+            await ensure(Promise.resolve(err('error')), factory);
+            expect(true).toBe(false);
+          } catch (error) {
+            expect(error).toBeInstanceOf(CustomError);
+            expect((error as CustomError).message).toBe('Custom: error');
+            expect((error as CustomError).code).toBe(500);
+          }
+        });
+
+        test('unwraps successful async result normally with factory parameter', async () => {
+          const factory = (error: Error) => new Error('Should not be called');
+          expect(await ensure(Promise.resolve(ok(42)), factory)).toBe(42);
+          expect(await ensure(Promise.resolve(ok('hello')), factory)).toBe('hello');
+        });
+      });
+    });
   });
 });
