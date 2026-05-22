@@ -1,6 +1,6 @@
 {
   "name": "@uglyunicorn/amino",
-  "version": "0.99.28",
+  "version": "0.99.29",
   "description": "A lightweight, type-safe Result pattern implementation for TypeScript",
   "keywords": [
     "result",
@@ -45,17 +45,8 @@
     "test:coverage": "bun test --coverage",
     "prepublishOnly": "bun run test && bun run build"
   },
-  "peerDependencies": {
-    "hono": "latest"
-  },
-  "peerDependenciesMeta": {
-    "hono": {
-      "optional": true
-    }
-  },
   "devDependencies": {
     "@types/bun": "latest",
-    "hono": "latest",
     "typescript": "latest"
   },
   "publishConfig": {
